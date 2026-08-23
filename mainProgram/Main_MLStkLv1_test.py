@@ -99,11 +99,16 @@ sampleDataDict = {0: sampleSeqDict, 1: None, -1: None}
 
 featureTypeColumnMap = discoverFeatureTypeColumnMap(usedFeatureDict, sampleDataDict)
 
+# ------------------------------------------------------------------------------------------------------------------
+# 測試版：只取前 2 個 feature type，快速確認整條流程有沒有錯誤
+featureTypeColumnMap = dict(list(featureTypeColumnMap.items())[:2])
+print(f"[test] 只跑這 2 個 feature type: {list(featureTypeColumnMap.keys())}")
+
 # ======================================================================================================================
 # 每一個 normalize 方式 × 每一個 feature type × 每一個 model 做一對一訓練（Optuna TPE tune，5-fold CV，用 MCC 當優化目標）
 # normalize 後的資料是 Main_FeatureStk.py 存好的，這裡只需要讀取
-modelNameList = ['lightgbm', 'catboost', 'rbfsvm', 'gbc', 'ridge', 'lr', 'lda', 'ada', 'knn', 'nb', 'et', 'rf',
-                 'xgboost', 'mlp', 'dt', 'svm', 'qda']
+# 測試版：只用 lightgbm、rf(random forest) 這兩個 model，1小時內快速確認有無錯誤
+modelNameList = ['lightgbm', 'rf']
 
 os.makedirs(mlScorePath, exist_ok=True)
 resultRows = []
@@ -137,32 +142,6 @@ for normalizeMethod in normalizeMethodList:
                                    'model': modelName, 'mcc': None, 'error': str(e)})
 
 resultDf = pd.DataFrame(resultRows)
-resultCsvPath = mlScorePath + f'featureType_model_mccScore_{dataName}.csv'
+resultCsvPath = mlScorePath + f'featureType_model_mccScore_{dataName}_test.csv'
 resultDf.to_csv(resultCsvPath, index=False)
-print(f"每個 normalizeMethod × feature type × model 的 MCC 分數已儲存到 {resultCsvPath}")
-
-# # ======================================================================================================================
-# # normalization：分別跑 standard 與 robust 兩種方式
-# for normalizeMethod in normalizeMethodList:
-#     nmlzScalerPath = paramPath + f'{dataName}_{normalizeMethod}Scaler.pkl'
-
-#     trainNmlzDf = encodeObj.dataNormalization(encodeTrainDf=encodeTrainDf,
-#                                               encodeIndpDf=None,  # train scaler存起來 ，indp 另外做
-#                                               normalization=normalizeMethod,
-#                                               saveNmlzScalerPklPath=nmlzScalerPath,
-#                                               loadNmlzScalerPklPath=None,
-#                                               b_loadPkl=False)  # True: 讀取 NmlzScaler 的 pkl 檔 (loadNmlzScalerPklPath)
-#     # False: 把 NmlzScaler 存至 pkl 檔 (saveNmlzScalerPklPath)
-
-#     indpNmlzDf = encodeObj.dataNormalization(encodeTrainDf=None,
-#                                              encodeIndpDf=encodeIndpDf,
-#                                              normalization=normalizeMethod,
-#                                              saveNmlzScalerPklPath=None,
-#                                              loadNmlzScalerPklPath=nmlzScalerPath,
-#                                              b_loadPkl=True)  # indp test set 永遠使用 training set 存好的 NmlzScaler.pkl 檔
-
-#     trainNmlzCsvPath = featureStatPath + f'train_{dataName}_{normalizeMethod}.csv'
-#     indpNmlzCsvPath = featureStatPath + f'indp_{dataName}_{normalizeMethod}.csv'
-
-#     trainNmlzDf.to_csv(trainNmlzCsvPath)
-#     indpNmlzDf.to_csv(indpNmlzCsvPath)
+print(f"[test] 每個 normalizeMethod × feature type × model 的 MCC 分數已儲存到 {resultCsvPath}")
