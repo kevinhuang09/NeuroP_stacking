@@ -1,0 +1,9 @@
+*.csv
+*.fasta
+
+# devPackage/tool 底下這些是程式運行必要的參考資料表，不要忽略
+!devPackage/PFeaturedata/*.csv
+!devPackage/iFeaturedata/*.csv
+!devPackage/intermediate files/*.csv
+!tool/SwissProtHumanProtein.fasta
+!tool/humen.fasta
