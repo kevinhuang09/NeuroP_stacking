@@ -332,8 +332,6 @@ DS_IndpCsvPath = featureStatPath + 'DS_Indp.csv'
 saveDataDictToCsv(DS_TrainDataDict, DS_TrainCsvPath)
 saveDataDictToCsv(DS_IndpDataDict, DS_IndpCsvPath)
 
-originFeatureDict = copy.deepcopy(featureDict)  # 保留合併前的原始featureDict，OVPC/GAAC/formula合併前各自獨立，供下面拆開統計用
-
 count, names = countEnabledFeatureType(featureDict)
 print(f"featureDict 啟用的 feature type 數量: {count}")
 
@@ -357,44 +355,28 @@ columnDiscoverySampleDataDict = {
 
 # mergedFeature.OVPC_GAAC_formula / mergedFeature.SingleValueCombine 這兩個 type，Package_Encode.py
 # 並不認得 'mergedFeature' 這個 key，直接對它們 encode 只會拿到 0 欄。
-# 所以改成用合併前的 originFeatureDict，把底下每個真正的 feature 分別單獨開啟、encode 一次拿欄位，
-# 再把欄位加總起來，才是這兩個 merged type 應該有的真實 feature size / feature name
-allOffOriginTemplate = buildAllOffFeatureDict(originFeatureDict)
+# 這兩份清單是對照 devPackage/OVP.py、PackageiFeature.py、PackageModelAmp.py、PackagePFeature.py
+# 原始程式碼比對確認過的真實欄位名稱，直接寫死取代掉原本 encode 出來的空清單
+OVPC_GAAC_FORMULA_COLUMN_LIST = [
+    'OVPC_Aromatic', 'OVPC_Negative', 'OVPC_Positive', 'OVPC_Polar', 'OVPC_Hydrophobic',
+    'OVPC_Aliphatic', 'OVPC_Tiny', 'OVPC_Charged', 'OVPC_Small', 'OVPC_Imino_acid',
+    'GAAC_alphatic', 'GAAC_aromatic', 'GAAC_postivecharge', 'GAAC_negativecharge', 'GAAC_uncharge',
+    'formula_C', 'formula_H', 'formula_N', 'formula_O', 'formula_S'
+]
 
-def discoverSingleFeatureColumnList(groupName, key):
-    singleFeatureDict = copy.deepcopy(allOffOriginTemplate)
-    if isinstance(singleFeatureDict[groupName][key], list):
-        singleFeatureDict[groupName][key][0] = True  # list型參數(如calculate_mw)只切換開關位，不能整個蓋成True
-    else:
-        singleFeatureDict[groupName][key] = True
-    singleEncodeObj = EncodeAllFeatures()
-    singleEncodeObj.featureDict = singleFeatureDict
-    singleDf = singleEncodeObj.dataEncodeOutPut(dataDict=columnDiscoverySampleDataDict)
-    return [c for c in singleDf.columns if c != 'y']
-
-def findFeatureGroupName(key):
-    for groupName in ['iFeature', 'pFeature', 'ampFeature', 'ovpFeature']:
-        if groupName in originFeatureDict and key in originFeatureDict[groupName]:
-            return groupName
-    return None
-
-# OVPC、GAAC、formula 合併前各自獨立的 feature size，加總成 OVPC_GAAC_formula 的真實 feature size
-ovpcGaacFormulaTypeList = [('ovpFeature', 'OVPC'), ('iFeature', 'GAAC'), ('ampFeature', 'formula')]
-ovpcGaacFormulaColumnList = []
-for groupName, key in ovpcGaacFormulaTypeList:
-    columnList = discoverSingleFeatureColumnList(groupName, key)
-    print(f"{groupName}.{key} feature size: {len(columnList)}")
-    ovpcGaacFormulaColumnList += columnList
-
-# 27 個單一數值型 feature 各自的 feature size，加總成 SingleValueCombine 的真實 feature size
-singleValueCombineColumnList = []
-for key in SINGLE_VALUE_FEATURE_NAME_LIST:
-    groupName = findFeatureGroupName(key)
-    singleValueCombineColumnList += discoverSingleFeatureColumnList(groupName, key)
+# 順序對應 SINGLE_VALUE_FEATURE_NAME_LIST 的 27 個 key，各自實際的欄位名稱
+SINGLE_VALUE_COMBINE_COLUMN_LIST = [
+    'Length', 'Calculate_mw', 'Calculate_charge', 'Isoelectric_point',
+    'Instability_index', 'Aromaticity', 'Aliphatic_Index', 'Hydrophobic',
+    'AASI', 'Argos', 'Bulkiness', 'Charge_phys', 'Charge_acid',
+    'Flexibility', 'Gravy', 'Levitt_alpha', 'MSS', 'Polarity',
+    'Refractivity', 'TM_tend', 'Boman_Index', 'Eisenberg',
+    'Hopp_woods', 'Janin', 'Kytedoolittle', 'Shannon-Entropy', 'Charge_density'
+]
 
 mergedFeatureColumnMap = {
-    'mergedFeature.OVPC_GAAC_formula': ovpcGaacFormulaColumnList,
-    'mergedFeature.SingleValueCombine': singleValueCombineColumnList,
+    'mergedFeature.OVPC_GAAC_formula': OVPC_GAAC_FORMULA_COLUMN_LIST,
+    'mergedFeature.SingleValueCombine': SINGLE_VALUE_COMBINE_COLUMN_LIST,
 }
 
 # 建立 feature type 名稱 -> 欄位名稱清單 的對照表（合併後最終使用的 33 類 feature type），
