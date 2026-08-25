@@ -363,7 +363,10 @@ allOffOriginTemplate = buildAllOffFeatureDict(originFeatureDict)
 
 def discoverSingleFeatureColumnList(groupName, key):
     singleFeatureDict = copy.deepcopy(allOffOriginTemplate)
-    singleFeatureDict[groupName][key] = True
+    if isinstance(singleFeatureDict[groupName][key], list):
+        singleFeatureDict[groupName][key][0] = True  # list型參數(如calculate_mw)只切換開關位，不能整個蓋成True
+    else:
+        singleFeatureDict[groupName][key] = True
     singleEncodeObj = EncodeAllFeatures()
     singleEncodeObj.featureDict = singleFeatureDict
     singleDf = singleEncodeObj.dataEncodeOutPut(dataDict=columnDiscoverySampleDataDict)
