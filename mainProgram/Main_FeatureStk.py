@@ -1,15 +1,30 @@
-# 禁止彈出圖表視窗
 import matplotlib
-matplotlib.use('Agg')
 
-# 使用vscode進行編譯請開啟
+def setMatplotlibBackend(disablePopup):
+    """disablePopup=True: 使用Agg backend，禁止彈出圖表視窗；disablePopup=False: 維持預設backend，正常跳出視窗"""
+    if disablePopup:
+        matplotlib.use('Agg')
+
+disablePlotPopup = True  # 是否禁止彈出圖表視窗
+setMatplotlibBackend(disablePlotPopup)
+
 import sys, os
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent = os.path.join(current_dir, "..")
-sys.path.append(parent)
 
+def setupParentPath(enableVscodeParentPath):
+    """
+    enableVscodeParentPath=True: 
+    使用Pycharm, Vscode進行編譯時，把上一層目錄加入sys.path，方便import套件
+    """
+    if enableVscodeParentPath:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        parent = os.path.join(current_dir, "..")
+        sys.path.append(parent)
+
+useVscodeParentPath = True  # 使用pycharm, vscode進行編譯請開啟
+setupParentPath(useVscodeParentPath)
 
 import copy
+import csv
 import json
 
 from sklearn.model_selection import train_test_split
@@ -174,6 +189,63 @@ def countEnabledFeatureType(featureDict):
 
     return len(enabledFeatureList), enabledFeatureList
 
+def buildAllOffFeatureDict(baseDict):
+    """把 iFeature/pFeature/ampFeature/ovpFeature/mergedFeature/motifBitVecFeature/centerGDPFeature 全部開關關閉，保留其餘參數結構"""
+    offDict = copy.deepcopy(baseDict)
+    for groupName in ['iFeature', 'pFeature', 'ampFeature', 'ovpFeature', 'mergedFeature']:
+        if groupName not in offDict:
+            continue
+        for key, value in offDict[groupName].items():
+            if isinstance(value, list):
+                value[0] = False
+            else:
+                offDict[groupName][key] = False
+    offDict['motifBitVecFeature']['Usage'] = False
+    offDict['centerGDPFeature']['Usage'] = False
+    return offDict
+
+def getRealEnabledFeatureTypeList(featureDict):
+    """列出真正會產生欄位的 feature type（(groupName, key) tuple 清單）"""
+    enabledList = []
+    for groupName in ['iFeature', 'pFeature', 'ampFeature', 'ovpFeature', 'mergedFeature']:
+        if groupName not in featureDict:
+            continue
+        for key, value in featureDict[groupName].items():
+            if value is True or (isinstance(value, list) and value[0] is True):
+                enabledList.append((groupName, key))
+    if featureDict['motifBitVecFeature'].get('Usage') is True:
+        enabledList.append(('motifBitVecFeature', 'Usage'))
+    if featureDict['centerGDPFeature'].get('Usage') is True:
+        enabledList.append(('centerGDPFeature', 'Usage'))
+    return enabledList
+
+def discoverFeatureTypeColumnMap(featureDict, sampleDataDict):
+    """
+    對每個真正開啟的 feature type，各自單獨開啟、encode 一次（只為了拿欄位名稱，不重算真正的特徵值），
+    建立 feature type 名稱 -> 欄位名稱清單 的對照表，供之後把被過濾掉的 feature 欄位對應回所屬 feature type 使用。
+    """
+    realEnabledList = getRealEnabledFeatureTypeList(featureDict)
+    allOffTemplate = buildAllOffFeatureDict(featureDict)
+
+    featureTypeColumnMap = {}
+    for groupName, key in realEnabledList:
+        singleFeatureDict = copy.deepcopy(allOffTemplate)
+        if isinstance(singleFeatureDict[groupName][key], list):
+            singleFeatureDict[groupName][key][0] = True
+        else:
+            singleFeatureDict[groupName][key] = True
+
+        singleEncodeObj = EncodeAllFeatures()
+        singleEncodeObj.featureDict = singleFeatureDict
+        singleDf = singleEncodeObj.dataEncodeOutPut(dataDict=sampleDataDict)
+        columnList = [c for c in singleDf.columns if c != 'y']
+
+        typeName = f'{groupName}.{key}'
+        featureTypeColumnMap[typeName] = columnList
+        print(f"feature type {typeName}: {len(columnList)} 欄")
+
+    return featureTypeColumnMap
+
 # ======================================================================================================================
 # 基本路徑
 mlDataPath = "../data/mlData/"  # 內含 data 檔案 ex : train_F390.csv, boruta 檔案 ex :Boruta-featRank-RF.csv
@@ -259,6 +331,8 @@ DS_IndpCsvPath = featureStatPath + 'DS_Indp.csv'
 saveDataDictToCsv(DS_TrainDataDict, DS_TrainCsvPath)
 saveDataDictToCsv(DS_IndpDataDict, DS_IndpCsvPath)
 
+originFeatureDict = copy.deepcopy(featureDict)  # 保留合併前的原始featureDict，OVPC/GAAC/formula合併前各自獨立，供下面拆開統計用
+
 count, names = countEnabledFeatureType(featureDict)
 print(f"featureDict 啟用的 feature type 數量: {count}")
 
@@ -269,6 +343,42 @@ print(f"OVPC_GAAC_formula 啟用的 feature type 數量: {count2}")
 featureDict = buildSingleValueCombineFeatureDict()
 count3, names3 = countEnabledFeatureType(featureDict)
 print(f"singleValueCombine 啟用的 feature type 數量: {count3}")
+
+# ======================================================================================================================
+# 只需要少量序列來辨識每個 feature type 產生的欄位名稱，不需要整個 DS_Train
+os.makedirs(featureStatPath, exist_ok=True)
+columnDiscoverySampleSize = 5
+columnDiscoverySampleDataDict = {
+    0: dict(list(DS_TrainNegSeqDict.items())[:columnDiscoverySampleSize]),
+    1: dict(list(DS_TrainPosSeqDict.items())[:columnDiscoverySampleSize]),
+    -1: None
+}
+
+# OVPC、GAAC、formula 合併前各自獨立的 feature size（用合併前的 originFeatureDict 各自單獨開啟、encode 一次來拿欄位）
+ovpcGaacFormulaTypeList = [('ovpFeature', 'OVPC'), ('iFeature', 'GAAC'), ('ampFeature', 'formula')]
+allOffOriginTemplate = buildAllOffFeatureDict(originFeatureDict)
+for groupName, key in ovpcGaacFormulaTypeList:
+    singleFeatureDict = copy.deepcopy(allOffOriginTemplate)
+    singleFeatureDict[groupName][key] = True
+    singleEncodeObj = EncodeAllFeatures()
+    singleEncodeObj.featureDict = singleFeatureDict
+    singleDf = singleEncodeObj.dataEncodeOutPut(dataDict=columnDiscoverySampleDataDict)
+    columnList = [c for c in singleDf.columns if c != 'y']
+    print(f"{groupName}.{key} feature size: {len(columnList)}")
+
+# 建立 feature type 名稱 -> 欄位名稱清單 的對照表（合併後最終使用的 33 類 feature type），
+# 之後用來把被 FeatureStat 過濾掉的 feature 欄位對應回所屬 feature type
+featureTypeColumnMap = discoverFeatureTypeColumnMap(featureDict, columnDiscoverySampleDataDict)
+columnToFeatureType = {column: typeName for typeName, columnList in featureTypeColumnMap.items() for column in columnList}
+
+# 33 類 feature type 明細表：Feature Type, feature size, feature name（逗號分隔，放在最後一欄）
+featureTypeTablePath = featureStatPath + f'featureType_featureName_table_{dataName}.csv'
+with open(featureTypeTablePath, 'w', encoding='utf-8', newline='') as f:
+    writer = csv.writer(f)
+    writer.writerow(['Feature Type', 'feature size', 'feature name'])
+    for typeName, columnList in featureTypeColumnMap.items():
+        writer.writerow([typeName, len(columnList), ','.join(columnList)])
+print(f"{len(featureTypeColumnMap)} 類 feature type 明細表已儲存到 {featureTypeTablePath}")
 
 # 儲存這三步驟的 feature type 數量統計到 csv 中
 os.makedirs(featureStatPath, exist_ok=True)
@@ -336,10 +446,24 @@ for normalizeMethod in normalizeMethodList:
     featureStatObj.processDataLog(logPath=mlDataPath + f'{dataName}_{normalizeMethod}_')
 
     filterTrainNmlzPath = featureStatPath + f'filtered_train_{dataName}_{normalizeMethod}.csv'  # 過濾完 feature 後的 nmlz 訓練資料
+    filterIndpNmlzPath = featureStatPath + f'filtered_indp_{dataName}_{normalizeMethod}.csv'  # DS_Indp 同步 drop 掉跟訓練集一樣的 feature 後的資料
     removeFeatureListPath = featureStatPath + f'remove_feature_list_{dataName}_{normalizeMethod}.json'  # 被過濾掉的 feature 名稱清單
+    removeFeatureTypeListPath = featureStatPath + f'remove_featureType_list_{dataName}_{normalizeMethod}.json'  # 被過濾掉的 feature，依所屬 feature type 分組的清單
     filteredTrainNmlzDf.to_csv(filterTrainNmlzPath)
+
+    filteredIndpNmlzDf = indpNmlzDf.drop(columns=removeList)  # DS_Indp 用訓練集算出的 removeList 同步過濾，欄位才會跟訓練集一致
+    filteredIndpNmlzDf.to_csv(filterIndpNmlzPath)
+
     with open(removeFeatureListPath, 'w', encoding='utf-8') as f:
         json.dump(removeList, f, ensure_ascii=False, indent=2)
 
-    print(f"[{normalizeMethod}] Feature Stat 過濾完成，共過濾掉 {len(removeList)} 個 feature，剩餘 {filteredTrainNmlzDf.shape[1]} 欄，"
-          f"結果已儲存到 {filterTrainNmlzPath} 與 {removeFeatureListPath}")
+    removeFeatureTypeDict = {}
+    for column in removeList:
+        typeName = columnToFeatureType.get(column, 'unknown')
+        removeFeatureTypeDict.setdefault(typeName, []).append(column)
+    with open(removeFeatureTypeListPath, 'w', encoding='utf-8') as f:
+        json.dump(removeFeatureTypeDict, f, ensure_ascii=False, indent=2)
+
+    print(f"[{normalizeMethod}] Feature Stat 過濾完成，共過濾掉 {len(removeList)} 個 feature（分屬 {len(removeFeatureTypeDict)} 個 feature type），"
+          f"剩餘 {filteredTrainNmlzDf.shape[1]} 欄，結果已儲存到 {filterTrainNmlzPath}、{filterIndpNmlzPath}、"
+          f"{removeFeatureListPath} 與 {removeFeatureTypeListPath}")
