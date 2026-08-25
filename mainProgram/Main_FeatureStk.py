@@ -242,7 +242,7 @@ def discoverFeatureTypeColumnMap(featureDict, sampleDataDict):
 
         typeName = f'{groupName}.{key}'
         featureTypeColumnMap[typeName] = columnList
-        print(f"feature type {typeName}: {len(columnList)} 欄")
+        # print(f"feature type {typeName}: {len(columnList)} 欄")
 
     return featureTypeColumnMap
 
