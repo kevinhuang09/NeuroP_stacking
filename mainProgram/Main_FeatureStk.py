@@ -10,6 +10,7 @@ sys.path.append(parent)
 
 
 import copy
+import json
 
 from sklearn.model_selection import train_test_split
 
@@ -321,3 +322,24 @@ for normalizeMethod in normalizeMethodList:
     trainNmlzDf.to_csv(trainNmlzCsvPath)
     indpNmlzDf.to_csv(indpNmlzCsvPath)
     print(f"[{normalizeMethod}] normalize 後的資料已儲存到 {trainNmlzCsvPath} 與 {indpNmlzCsvPath}")
+
+    # ==================================================================================================================
+    # Feature Stat 分析：找出數值過度集中（top1percent 過高）的 feature 並過濾掉，MotifBitVec 系列 feature 受保護不被過濾
+    featureStatObj = FeatureStat(dataDf=trainNmlzDf)
+    featureStatObj.sdAnalysis(saveFigPath=featureStatPath + f"sd_analysis_{dataName}_{normalizeMethod}.jpg")
+    featureAnalysisXlsxPath = featureStatPath + f"featureAnalysis_{dataName}_{normalizeMethod}.xlsx"
+    featureStatObj.featureValuePct_analysis(saveFinalExcel=featureAnalysisXlsxPath)
+
+    filteredTrainNmlzDf, removeList = featureStatObj.processData(xlsxPath=featureAnalysisXlsxPath,
+                                                                  columnName='top1percent', number='+0.98',
+                                                                  protectFeatSubstringList=['MotifBitVec'])
+    featureStatObj.processDataLog(logPath=mlDataPath + f'{dataName}_{normalizeMethod}_')
+
+    filterTrainNmlzPath = featureStatPath + f'filtered_train_{dataName}_{normalizeMethod}.csv'  # 過濾完 feature 後的 nmlz 訓練資料
+    removeFeatureListPath = featureStatPath + f'remove_feature_list_{dataName}_{normalizeMethod}.json'  # 被過濾掉的 feature 名稱清單
+    filteredTrainNmlzDf.to_csv(filterTrainNmlzPath)
+    with open(removeFeatureListPath, 'w', encoding='utf-8') as f:
+        json.dump(removeList, f, ensure_ascii=False, indent=2)
+
+    print(f"[{normalizeMethod}] Feature Stat 過濾完成，共過濾掉 {len(removeList)} 個 feature，剩餘 {filteredTrainNmlzDf.shape[1]} 欄，"
+          f"結果已儲存到 {filterTrainNmlzPath} 與 {removeFeatureListPath}")
