@@ -371,13 +371,15 @@ for groupName, key in ovpcGaacFormulaTypeList:
 featureTypeColumnMap = discoverFeatureTypeColumnMap(featureDict, columnDiscoverySampleDataDict)
 columnToFeatureType = {column: typeName for typeName, columnList in featureTypeColumnMap.items() for column in columnList}
 
-# 33 類 feature type 明細表：Feature Type, feature size, feature name（逗號分隔，放在最後一欄）
+# 33 類 feature type 明細表：Feature Type, feature size；只有 mergedFeature 底下這兩個合併後的 type 才列出實際包含的欄位名稱（逗號分隔）
 featureTypeTablePath = featureStatPath + f'featureType_featureName_table_{dataName}.csv'
 with open(featureTypeTablePath, 'w', encoding='utf-8', newline='') as f:
     writer = csv.writer(f)
     writer.writerow(['Feature Type', 'feature size', 'feature name'])
     for typeName, columnList in featureTypeColumnMap.items():
-        writer.writerow([typeName, len(columnList), ','.join(columnList)])
+        isMergedType = typeName.startswith('mergedFeature.')
+        featureNameField = ','.join(columnList) if isMergedType else ''
+        writer.writerow([typeName, len(columnList), featureNameField])
 print(f"{len(featureTypeColumnMap)} 類 feature type 明細表已儲存到 {featureTypeTablePath}")
 
 # 儲存這三步驟的 feature type 數量統計到 csv 中
