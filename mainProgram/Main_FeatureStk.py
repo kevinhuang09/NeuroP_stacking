@@ -140,6 +140,16 @@ def buildOVPC_GAAC_formulaFeatureDict():
 
     return newFeatureDict
 
+# 這裡要用「featureDict 裡實際的 key」，大小寫要對上，不然 if feat in sub_dict 永遠找不到、關不掉
+SINGLE_VALUE_FEATURE_NAME_LIST = [
+    "length", "calculate_mw", "calculate_charge", "isoelectric_point",
+    "instability_index", "aromaticity", "aliphatic_index", "hydrophobic",
+    "aasi", "argos", "bulkiness", "charge_phys", "charge_acid",
+    "flexibility", "gravy", "levitt_alpha", "mss", "polarity",
+    "refractivity", "tm_tend", "boman_index", "eisenberg",
+    "hopp_woods", "janin", "kytedoolittle", "SE", "charge_density"
+]
+
 def buildSingleValueCombineFeatureDict():
     """
     將單一數值型理化性質特徵關閉，
@@ -147,20 +157,11 @@ def buildSingleValueCombineFeatureDict():
     """
     newFeatureDict = copy.deepcopy(featureDict)
 
-    # 這裡要用「featureDict 裡實際的 key」，大小寫要對上，不然 if feat in sub_dict 永遠找不到、關不掉
-    single_value_features = [
-        "length", "calculate_mw", "calculate_charge", "isoelectric_point",
-        "instability_index", "aromaticity", "aliphatic_index", "hydrophobic",
-        "aasi", "argos", "bulkiness", "charge_phys", "charge_acid",
-        "flexibility", "gravy", "levitt_alpha", "mss", "polarity",
-        "refractivity", "tm_tend", "boman_index", "eisenberg",
-        "hopp_woods", "janin", "kytedoolittle", "SE", "charge_density"
-    ]
-    print(f"singlevalue length : {len(single_value_features)}")
+    print(f"singlevalue length : {len(SINGLE_VALUE_FEATURE_NAME_LIST)}")
     # 自動巡訪並關閉原始群組中的對應特徵開關
     for group, sub_dict in newFeatureDict.items():
         if isinstance(sub_dict, dict):
-            for feat in single_value_features:
+            for feat in SINGLE_VALUE_FEATURE_NAME_LIST:
                 if feat in sub_dict:
                     if isinstance(sub_dict[feat], list):
                         sub_dict[feat][0] = False  # list 型參數只切換開關位，保留其餘參數
@@ -354,31 +355,61 @@ columnDiscoverySampleDataDict = {
     -1: None
 }
 
-# OVPC、GAAC、formula 合併前各自獨立的 feature size（用合併前的 originFeatureDict 各自單獨開啟、encode 一次來拿欄位）
-ovpcGaacFormulaTypeList = [('ovpFeature', 'OVPC'), ('iFeature', 'GAAC'), ('ampFeature', 'formula')]
+# mergedFeature.OVPC_GAAC_formula / mergedFeature.SingleValueCombine 這兩個 type，Package_Encode.py
+# 並不認得 'mergedFeature' 這個 key，直接對它們 encode 只會拿到 0 欄。
+# 所以改成用合併前的 originFeatureDict，把底下每個真正的 feature 分別單獨開啟、encode 一次拿欄位，
+# 再把欄位加總起來，才是這兩個 merged type 應該有的真實 feature size / feature name
 allOffOriginTemplate = buildAllOffFeatureDict(originFeatureDict)
-for groupName, key in ovpcGaacFormulaTypeList:
+
+def discoverSingleFeatureColumnList(groupName, key):
     singleFeatureDict = copy.deepcopy(allOffOriginTemplate)
     singleFeatureDict[groupName][key] = True
     singleEncodeObj = EncodeAllFeatures()
     singleEncodeObj.featureDict = singleFeatureDict
     singleDf = singleEncodeObj.dataEncodeOutPut(dataDict=columnDiscoverySampleDataDict)
-    columnList = [c for c in singleDf.columns if c != 'y']
+    return [c for c in singleDf.columns if c != 'y']
+
+def findFeatureGroupName(key):
+    for groupName in ['iFeature', 'pFeature', 'ampFeature', 'ovpFeature']:
+        if groupName in originFeatureDict and key in originFeatureDict[groupName]:
+            return groupName
+    return None
+
+# OVPC、GAAC、formula 合併前各自獨立的 feature size，加總成 OVPC_GAAC_formula 的真實 feature size
+ovpcGaacFormulaTypeList = [('ovpFeature', 'OVPC'), ('iFeature', 'GAAC'), ('ampFeature', 'formula')]
+ovpcGaacFormulaColumnList = []
+for groupName, key in ovpcGaacFormulaTypeList:
+    columnList = discoverSingleFeatureColumnList(groupName, key)
     print(f"{groupName}.{key} feature size: {len(columnList)}")
+    ovpcGaacFormulaColumnList += columnList
+
+# 27 個單一數值型 feature 各自的 feature size，加總成 SingleValueCombine 的真實 feature size
+singleValueCombineColumnList = []
+for key in SINGLE_VALUE_FEATURE_NAME_LIST:
+    groupName = findFeatureGroupName(key)
+    singleValueCombineColumnList += discoverSingleFeatureColumnList(groupName, key)
+
+mergedFeatureColumnMap = {
+    'mergedFeature.OVPC_GAAC_formula': ovpcGaacFormulaColumnList,
+    'mergedFeature.SingleValueCombine': singleValueCombineColumnList,
+}
 
 # 建立 feature type 名稱 -> 欄位名稱清單 的對照表（合併後最終使用的 33 類 feature type），
 # 之後用來把被 FeatureStat 過濾掉的 feature 欄位對應回所屬 feature type
 featureTypeColumnMap = discoverFeatureTypeColumnMap(featureDict, columnDiscoverySampleDataDict)
 columnToFeatureType = {column: typeName for typeName, columnList in featureTypeColumnMap.items() for column in columnList}
 
-# 33 類 feature type 明細表：Feature Type, feature size；只有 mergedFeature 底下這兩個合併後的 type 才列出實際包含的欄位名稱（逗號分隔）
+# 33 類 feature type 明細表：Feature Type, feature size；只有 mergedFeature 底下這兩個合併後的 type，
+# 以及 feature size 剛好等於 1 的 type，才列出實際包含的欄位名稱（逗號分隔）
 featureTypeTablePath = featureStatPath + f'featureType_featureName_table_{dataName}.csv'
 with open(featureTypeTablePath, 'w', encoding='utf-8', newline='') as f:
     writer = csv.writer(f)
     writer.writerow(['Feature Type', 'feature size', 'feature name'])
     for typeName, columnList in featureTypeColumnMap.items():
-        isMergedType = typeName.startswith('mergedFeature.')
-        featureNameField = ','.join(columnList) if isMergedType else ''
+        if typeName in mergedFeatureColumnMap:  # merged type 用加總後的真實欄位取代原本 encode 出來的空清單
+            columnList = mergedFeatureColumnMap[typeName]
+        needFeatureName = typeName.startswith('mergedFeature.') or len(columnList) == 1
+        featureNameField = ','.join(columnList) if needFeatureName else ''
         writer.writerow([typeName, len(columnList), featureNameField])
 print(f"{len(featureTypeColumnMap)} 類 feature type 明細表已儲存到 {featureTypeTablePath}")
 
