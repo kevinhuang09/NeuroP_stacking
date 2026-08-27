@@ -27,9 +27,6 @@ import copy
 import csv
 import json
 
-from openpyxl import Workbook
-from openpyxl.styles import Alignment
-
 from sklearn.model_selection import train_test_split
 
 from userPackage.Package_Encode import EncodeAllFeatures
@@ -495,7 +492,7 @@ for normalizeMethod in normalizeMethodList:
     filterTrainNmlzPath = featureStatPath + f'filtered_train_{dataName}_{normalizeMethod}.csv'  # 過濾完 feature 後的 nmlz 訓練資料
     filterIndpNmlzPath = featureStatPath + f'filtered_indp_{dataName}_{normalizeMethod}.csv'  # DS_Indp 同步 drop 掉跟訓練集一樣的 feature 後的資料
     removeFeatureListPath = featureStatPath + f'remove_feature_list_{dataName}_{normalizeMethod}.json'  # 被過濾掉的 feature 名稱清單
-    featureTypeFilterSummaryPath = featureStatPath + f'featureType_filterSummary_{dataName}_{normalizeMethod}.xlsx'  # 各 feature type 過濾前後的 feature 數量統計
+    removeFeatureTypeListPath = featureStatPath + f'remove_featureType_list_{dataName}_{normalizeMethod}.json'  # 被過濾掉的 feature，依所屬 feature type 分組的清單
     filteredTrainNmlzDf.to_csv(filterTrainNmlzPath)
 
     filteredIndpNmlzDf = indpNmlzDf.drop(columns=removeList)  # DS_Indp 用訓練集算出的 removeList 同步過濾，欄位才會跟訓練集一致
@@ -504,41 +501,13 @@ for normalizeMethod in normalizeMethodList:
     with open(removeFeatureListPath, 'w', encoding='utf-8') as f:
         json.dump(removeList, f, ensure_ascii=False, indent=2)
 
-    # Type = feature type名稱的 group 前綴（如 iFeature、pFeature、ampFeature...），Feature Type 為去掉該前綴後的名稱
-    filterSummaryRows = []
-    for typeName in ordered_keys:
-        groupName, featTypeName = typeName.split('.', 1)
-        columnList = featureTypeColumnMap[typeName]
-        if typeName in mergedFeatureColumnMap:
-            columnList = mergedFeatureColumnMap[typeName]
-        featureSize = sum(1 for column in columnList if column in trainNmlzDf.columns)
-        featureSizeAfterFilter = sum(1 for column in columnList if column in filteredTrainNmlzDf.columns)
-        filterSummaryRows.append((groupName, featTypeName, featureSize, featureSizeAfterFilter))
+    removeFeatureTypeDict = {}
+    for column in removeList:
+        typeName = columnToFeatureType.get(column, 'unknown')
+        removeFeatureTypeDict.setdefault(typeName, []).append(column)
+    with open(removeFeatureTypeListPath, 'w', encoding='utf-8') as f:
+        json.dump(removeFeatureTypeDict, f, ensure_ascii=False, indent=2)
 
-    workbook = Workbook()
-    worksheet = workbook.active
-    worksheet.title = 'summary'
-    worksheet.append(['Type', 'Feature Type', 'Feature Size', 'Feature Number After Filtering'])
-    for row in filterSummaryRows:
-        worksheet.append(list(row))
-
-    # 把 Type 欄位中連續相同的值合併儲存格並置中
-    centerAlignment = Alignment(horizontal='center', vertical='center')
-    dataStartRow = 2
-    dataEndRow = dataStartRow + len(filterSummaryRows) - 1
-    mergeStartRow = dataStartRow
-    for rowIdx in range(dataStartRow + 1, dataEndRow + 2):
-        currentType = worksheet.cell(row=rowIdx, column=1).value if rowIdx <= dataEndRow else None
-        previousType = worksheet.cell(row=rowIdx - 1, column=1).value
-        if currentType != previousType:
-            if rowIdx - 1 > mergeStartRow:
-                worksheet.merge_cells(start_row=mergeStartRow, start_column=1, end_row=rowIdx - 1, end_column=1)
-            worksheet.cell(row=mergeStartRow, column=1).alignment = centerAlignment
-            mergeStartRow = rowIdx
-
-    workbook.save(featureTypeFilterSummaryPath)
-
-    removedFeatureTypeCount = len({columnToFeatureType.get(column, 'unknown') for column in removeList})
-    print(f"[{normalizeMethod}] Feature Stat 過濾完成，共過濾掉 {len(removeList)} 個 feature（分屬 {removedFeatureTypeCount} 個 feature type），"
+    print(f"[{normalizeMethod}] Feature Stat 過濾完成，共過濾掉 {len(removeList)} 個 feature（分屬 {len(removeFeatureTypeDict)} 個 feature type），"
           f"剩餘 {filteredTrainNmlzDf.shape[1]} 欄，結果已儲存到 {filterTrainNmlzPath}、{filterIndpNmlzPath}、"
-          f"{removeFeatureListPath} 與 {featureTypeFilterSummaryPath}")
+          f"{removeFeatureListPath} 與 {removeFeatureTypeListPath}")
