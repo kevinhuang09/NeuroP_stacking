@@ -221,12 +221,16 @@ class EncodeModelAmp:
             peptideMSWDf.columns = mswColumns
             featureDf = pd.concat([featureDf, peptideMSWDf], axis=1)
 
-        if self.featureDict.get("peparc") is True:
+        if self.featureDict.get("pepArc") is True:
             pepArcSequence = PeptideDescriptor(self.sequencelist, "pepArc")
             pepArcSequence.calculate_arc(modality='max')
             peptidePepArc = pepArcSequence.descriptor
             peptidePepArcDf = pd.DataFrame(peptidePepArc)
-            featureDf.insert(len(featureDf.columns.tolist()), 'pepArc', peptidePepArcDf)
+            pepArcColumnsNum = [*range(1, len(peptidePepArcDf.columns.tolist()) + 1)]
+            pepArcColumnsStr = ['pepArc_'] * len(peptidePepArcDf.columns.tolist())
+            pepArcColumns = list(map(lambda x, y: x + '_' + str(y), pepArcColumnsStr, pepArcColumnsNum))
+            peptidePepArcDf.columns = pepArcColumns
+            featureDf = pd.concat([featureDf, peptidePepArcDf], axis=1)
 
         if self.featureDict.get("polarity") is True:
             polaritySequence = PeptideDescriptor(self.sequencelist, "polarity")
