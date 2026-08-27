@@ -311,6 +311,7 @@ print(f"DS_Train/DS_Val 數量統計已儲存到{fastaStatPath}中")
 
 DS_TrainDataDict = {0 : DS_TrainNegSeqDict, 1 : DS_TrainPosSeqDict, -1 : None}
 DS_IndpDataDict = {0 : DS_IndpNegSeqDict, 1 : DS_IndpPosSeqDict, -1 : None}
+DS_ValDataDict = {0 : DS_ValNegSeqDict, 1 : DS_ValPosSeqDict, -1 : None}
 
 def saveDataDictToCsv(dataDict, csvPath):
     """把 dataDict（{-1/0/1: {序列名稱: 序列}}）攤平存成 csv，欄位為 name, sequence, label"""
@@ -329,8 +330,10 @@ def saveDataDictToCsv(dataDict, csvPath):
 
 DS_TrainCsvPath = featureStatPath + 'DS_Train.csv'
 DS_IndpCsvPath = featureStatPath + 'DS_Indp.csv'
+DS_ValCsvPath = featureStatPath + 'DS_Val.csv'
 saveDataDictToCsv(DS_TrainDataDict, DS_TrainCsvPath)
 saveDataDictToCsv(DS_IndpDataDict, DS_IndpCsvPath)
+saveDataDictToCsv(DS_ValDataDict, DS_ValCsvPath)
 
 count, names = countEnabledFeatureType(featureDict)
 print(f"featureDict 啟用的 feature type 數量: {count}")
@@ -443,14 +446,17 @@ encodeObj.dataEncodeSetup(saveFeatureDict=featureDict,  # normalization 前傳�
 
 encodeDS_TrainDf = encodeObj.dataEncodeOutPut(dataDict = DS_TrainDataDict)
 encodeDS_IndpDf = encodeObj.dataEncodeOutPut(dataDict = DS_IndpDataDict)
+encodeDS_ValDf = encodeObj.dataEncodeOutPut(dataDict = DS_ValDataDict)
 
 # 儲存 encode 之後的檔案
 os.makedirs(featureStatPath, exist_ok=True)
 encodeDS_TrainCsvPath = featureStatPath + f'encode_{dataName}_DS_Train.csv'
 encodeDS_IndpCsvPath = featureStatPath + f'encode_{dataName}_DS_Indp.csv'
+encodeDS_ValCsvPath = featureStatPath + f'encode_{dataName}_DS_Val.csv'
 encodeDS_TrainDf.to_csv(encodeDS_TrainCsvPath)
 encodeDS_IndpDf.to_csv(encodeDS_IndpCsvPath)
-print(f"encode 後的資料已儲存到 {encodeDS_TrainCsvPath} 與 {encodeDS_IndpCsvPath}")
+encodeDS_ValDf.to_csv(encodeDS_ValCsvPath)
+print(f"encode 後的資料已儲存到 {encodeDS_TrainCsvPath}、{encodeDS_IndpCsvPath} 與 {encodeDS_ValCsvPath}")
 
 # 做normalization
 # ======================================================================================================================
@@ -470,12 +476,20 @@ for normalizeMethod in normalizeMethodList:
                                              saveNmlzScalerPklPath=None,
                                              loadNmlzScalerPklPath=nmlzScalerPath,
                                              b_loadPkl=True)  # indp test set 永遠使用 training set 存好的 NmlzScaler.pkl 檔
+    valNmlzDf = encodeObj.dataNormalization(encodeTrainDf=None,
+                                            encodeIndpDf=encodeDS_ValDf,
+                                            normalization=normalizeMethod,
+                                            saveNmlzScalerPklPath=None,
+                                            loadNmlzScalerPklPath=nmlzScalerPath,
+                                            b_loadPkl=True)  # DS_Val 同樣永遠使用 training set 存好的 NmlzScaler.pkl 檔
 
     trainNmlzCsvPath = featureStatPath + f'train_{dataName}_{normalizeMethod}.csv'
     indpNmlzCsvPath = featureStatPath + f'indp_{dataName}_{normalizeMethod}.csv'
+    valNmlzCsvPath = featureStatPath + f'val_{dataName}_{normalizeMethod}.csv'
     trainNmlzDf.to_csv(trainNmlzCsvPath)
     indpNmlzDf.to_csv(indpNmlzCsvPath)
-    print(f"[{normalizeMethod}] normalize 後的資料已儲存到 {trainNmlzCsvPath} 與 {indpNmlzCsvPath}")
+    valNmlzDf.to_csv(valNmlzCsvPath)
+    print(f"[{normalizeMethod}] normalize 後的資料已儲存到 {trainNmlzCsvPath}、{indpNmlzCsvPath} 與 {valNmlzCsvPath}")
 
     # ==================================================================================================================
     # Feature Stat 分析：找出數值過度集中（top1percent 過高）的 feature 並過濾掉，MotifBitVec 系列 feature 受保護不被過濾
@@ -491,12 +505,16 @@ for normalizeMethod in normalizeMethodList:
 
     filterTrainNmlzPath = featureStatPath + f'filtered_train_{dataName}_{normalizeMethod}.csv'  # 過濾完 feature 後的 nmlz 訓練資料
     filterIndpNmlzPath = featureStatPath + f'filtered_indp_{dataName}_{normalizeMethod}.csv'  # DS_Indp 同步 drop 掉跟訓練集一樣的 feature 後的資料
+    filterValNmlzPath = featureStatPath + f'filtered_val_{dataName}_{normalizeMethod}.csv'  # DS_Val 同步 drop 掉跟訓練集一樣的 feature 後的資料
     removeFeatureListPath = featureStatPath + f'remove_feature_list_{dataName}_{normalizeMethod}.json'  # 被過濾掉的 feature 名稱清單
     removeFeatureTypeListPath = featureStatPath + f'remove_featureType_list_{dataName}_{normalizeMethod}.json'  # 被過濾掉的 feature，依所屬 feature type 分組的清單
     filteredTrainNmlzDf.to_csv(filterTrainNmlzPath)
 
     filteredIndpNmlzDf = indpNmlzDf.drop(columns=removeList)  # DS_Indp 用訓練集算出的 removeList 同步過濾，欄位才會跟訓練集一致
     filteredIndpNmlzDf.to_csv(filterIndpNmlzPath)
+
+    filteredValNmlzDf = valNmlzDf.drop(columns=removeList)  # DS_Val 用訓練集算出的 removeList 同步過濾，欄位才會跟訓練集一致
+    filteredValNmlzDf.to_csv(filterValNmlzPath)
 
     with open(removeFeatureListPath, 'w', encoding='utf-8') as f:
         json.dump(removeList, f, ensure_ascii=False, indent=2)
@@ -509,5 +527,5 @@ for normalizeMethod in normalizeMethodList:
         json.dump(removeFeatureTypeDict, f, ensure_ascii=False, indent=2)
 
     print(f"[{normalizeMethod}] Feature Stat 過濾完成，共過濾掉 {len(removeList)} 個 feature（分屬 {len(removeFeatureTypeDict)} 個 feature type），"
-          f"剩餘 {filteredTrainNmlzDf.shape[1]} 欄，結果已儲存到 {filterTrainNmlzPath}、{filterIndpNmlzPath}、"
+          f"剩餘 {filteredTrainNmlzDf.shape[1]} 欄，結果已儲存到 {filterTrainNmlzPath}、{filterIndpNmlzPath}、{filterValNmlzPath}、"
           f"{removeFeatureListPath} 與 {removeFeatureTypeListPath}")
