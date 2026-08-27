@@ -28,15 +28,19 @@ import copy
 import pandas as pd
 from userPackage.Package_Encode import EncodeAllFeatures
 from MLProcess.PycaretWrapper import PycaretWrapper
+from MLProcess.Predict import Predict
 
 # ======================================================================================================================
 # 基本路徑
 paramPath = "../data/param/"  # 內含檔案: featureTypeDict.pkl, normalize.pkl
 featureStatPath = '../data/featureStat/'
 mlScorePath = "../data/mlScore/"  # 內含 ml model 預測完並算好分的檔案
+tuneModelPath = "../data/tuneModel/"  # 內含每個 normalizeMethod/featureType 底下 finalize 好的 model
 dataName = 'NeuroP_1'
 
 normalizeMethod = ['standard', 'robust']  # normalization 要跑的兩種方式
+
+tune_model = True  # True: 針對每個 normalizeMethod × feature type × model 做一對一 tune 並存檔；False: 跳過訓練，直接讀取已存的 finalized model 做 predict
 
 # ======================================================================================================================
 # 讀取 Main_FeatureStk.py 存的 featureTypeDict.json（實際 encode 時用的完整 featureDict，含各參數）
@@ -122,40 +126,77 @@ for normalizeMethod in normalizeMethod:
     dataTrainDf = pd.read_csv(filterTrainNmlzCsvPath, index_col=[0])
     print(f"[{normalizeMethod}] 讀取 filtered 後的資料：dataTrainDf={dataTrainDf.shape}")
 
+    # DS_Val：拿來給每個 tune/load 好的 model 做 predict，組成 Meta-Feature-Matrix
+    filterValNmlzCsvPath = featureStatPath + f'filtered_val_{dataName}_{normalizeMethod}.csv'
+    dataValDf = pd.read_csv(filterValNmlzCsvPath, index_col=[0])
+    print(f"[{normalizeMethod}] 讀取 DS_Val filtered 後的資料：dataValDf={dataValDf.shape}")
+
+    metaFeatureMatrix = pd.DataFrame(index=dataValDf.index)
+    metaFeatureMatrix['y'] = dataValDf['y']
+
     for typeName, columnList in featureTypeColumnMap.items(): # 一次挑一種 Feature Type
         # filtered_train 已被 FeatureStat 過濾掉部分欄位，columnList 是用原始未過濾的 featureDict 反查出來的，
         # 兩者可能對不上，所以只取仍存在於 dataTrainDf 的欄位，避免 KeyError
         survivedColumnList = [c for c in columnList if c in dataTrainDf.columns]
         if not survivedColumnList:
             print(f"[跳過] {normalizeMethod} + {typeName}：欄位全部被 FeatureStat 過濾掉，無法訓練")
-            resultRows.append({'normalizeMethod': normalizeMethod, 'featureType': typeName,
-                               'model': None, 'mcc': None, 'error': 'all columns filtered out'})
+            if tune_model:
+                resultRows.append({'normalizeMethod': normalizeMethod, 'featureType': typeName,
+                                   'model': None, 'mcc': None, 'error': 'all columns filtered out'})
             continue
         if len(survivedColumnList) < len(columnList):
             print(f"[提醒] {normalizeMethod} + {typeName}：{len(columnList) - len(survivedColumnList)} 欄"
                   f"被 FeatureStat 過濾掉，剩餘 {len(survivedColumnList)} 欄")
         subTrainDf = dataTrainDf[survivedColumnList + ['y']].copy() # 篩選該feature type 之 feature
+        subVal_X = dataValDf[survivedColumnList].copy()  # DS_Val 同一組欄位，只留 X 給 predict 用
+
+        # 每個 normalizeMethod + featureType 的 model 各自存在獨立資料夾，避免互相覆蓋
+        comboSavePath = os.path.join(tuneModelPath, normalizeMethod, typeName.replace('.', '_'))
+        os.makedirs(comboSavePath, exist_ok=True)
 
         pycObj = PycaretWrapper()
-        pycObj.doSetup(trainData=subTrainDf, sessionID=42)
+        if tune_model:
+            pycObj.doSetup(trainData=subTrainDf, sessionID=42)
 
         for modelName in modelNameList: # 每個 model 逐一嘗試
             try:
-                # 進行一對一訓練
-                tunedModelList, tunerList = pycObj.doTuneModel(searchLibrary='optuna', searchAlg='tpe',
-                                                                includeModelList=[modelName], foldNum=5,
-                                                                n_iter=10, early_stopping=False, customGridDict=None)
-                _, scoreRank = pycObj.doCompareModel(fold=5, includeModelList=tunedModelList)  # 對 tune 好的 model 重新做一次 CV 拿分數表
-                mccScore = scoreRank['MCC'].iloc[0]
-                print(f"[完成] {normalizeMethod} + {typeName} + {modelName}: MCC = {mccScore}")
-                resultRows.append({'normalizeMethod': normalizeMethod, 'featureType': typeName,
-                                   'model': modelName, 'mcc': mccScore})
-            except Exception as e:
-                print(f"[跳過] {normalizeMethod} + {typeName} + {modelName} 訓練失敗: {e}")
-                resultRows.append({'normalizeMethod': normalizeMethod, 'featureType': typeName,
-                                   'model': modelName, 'mcc': None, 'error': str(e)})
+                if tune_model:
+                    # 進行一對一訓練
+                    pycObj.doTuneModel(searchLibrary='optuna', searchAlg='tpe',
+                                       includeModelList=[modelName], foldNum=5,
+                                       n_iter=10, early_stopping=False, customGridDict=None)
+                    _, scoreRank = pycObj.doCompareModel(fold=5, includeModelList=pycObj.tunedModelList)  # 對 tune 好的 model 重新做一次 CV 拿分數表
+                    mccScore = scoreRank['MCC'].iloc[0]
+                    print(f"[完成] {normalizeMethod} + {typeName} + {modelName}: MCC = {mccScore}")
+                    resultRows.append({'normalizeMethod': normalizeMethod, 'featureType': typeName,
+                                       'model': modelName, 'mcc': mccScore})
 
-resultDf = pd.DataFrame(resultRows)
-resultCsvPath = mlScorePath + f'featureType_model_mccScore_{dataName}.csv'
-resultDf.to_csv(resultCsvPath, index=False)
-print(f"每個 normalizeMethod × feature type × model 的 MCC 分數已儲存到 {resultCsvPath}")
+                    pycObj.doFinalizeModel()  # train + self test 合併重新 fit，存起來給之後直接讀取用
+                    pycObj.doSaveModel(comboSavePath, b_isFinalizedModel=True)
+                    predictModelList = pycObj.finalModelList
+                else:
+                    # tune_model=False：跳過訓練，直接讀取已存的 finalized model
+                    predictModelList = pycObj.doLoadModel(comboSavePath, fileNameList=[modelName],
+                                                           b_isFinalizedModel=True)
+
+                # 用這個 model 對 DS_Val 做 predict，寫進 Meta-Feature-Matrix
+                predObj = Predict(dataX=subVal_X, modelList=predictModelList)
+                _, probVectorList = predObj.doPredict()
+                metaFeatureMatrix[f'{typeName}.{modelName}'] = probVectorList[0]
+                print(f"[predict] {normalizeMethod} + {typeName} + {modelName} 已寫入 Meta-Feature-Matrix")
+            except Exception as e:
+                actionName = '訓練' if tune_model else '讀取/predict'
+                print(f"[跳過] {normalizeMethod} + {typeName} + {modelName} {actionName}失敗: {e}")
+                if tune_model:
+                    resultRows.append({'normalizeMethod': normalizeMethod, 'featureType': typeName,
+                                       'model': modelName, 'mcc': None, 'error': str(e)})
+
+    metaFeatureMatrixPath = mlScorePath + f'Meta-Feature-Matrix_{dataName}_{normalizeMethod}.csv'
+    metaFeatureMatrix.to_csv(metaFeatureMatrixPath)
+    print(f"[{normalizeMethod}] Meta-Feature-Matrix 已儲存到 {metaFeatureMatrixPath}")
+
+if tune_model:
+    resultDf = pd.DataFrame(resultRows)
+    resultCsvPath = mlScorePath + f'featureType_model_mccScore_{dataName}.csv'
+    resultDf.to_csv(resultCsvPath, index=False)
+    print(f"每個 normalizeMethod × feature type × model 的 MCC 分數已儲存到 {resultCsvPath}")
