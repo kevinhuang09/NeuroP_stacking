@@ -1,12 +1,27 @@
-# 禁止彈出圖表視窗
 import matplotlib
-matplotlib.use('Agg')
 
-# 使用vscode進行編譯請開啟
+def setMatplotlibBackend(disablePopup):
+    """disablePopup=True: 使用Agg backend，禁止彈出圖表視窗；disablePopup=False: 維持預設backend，正常跳出視窗"""
+    if disablePopup:
+        matplotlib.use('Agg')
+
+disablePlotPopup = True  # 是否禁止彈出圖表視窗
+setMatplotlibBackend(disablePlotPopup)
+
 import sys, os
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent = os.path.join(current_dir, "..")
-sys.path.append(parent)
+
+def setupParentPath(enableVscodeParentPath):
+    """
+    enableVscodeParentPath=True: 
+    使用Pycharm, Vscode進行編譯時，把上一層目錄加入sys.path，方便import套件
+    """
+    if enableVscodeParentPath:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        parent = os.path.join(current_dir, "..")
+        sys.path.append(parent)
+
+useVscodeParentPath = True  # 使用pycharm, vscode進行編譯請開啟
+setupParentPath(useVscodeParentPath)
 
 import json
 import copy
@@ -16,22 +31,14 @@ from MLProcess.PycaretWrapper import PycaretWrapper
 
 # ======================================================================================================================
 # 基本路徑
-mlDataPath = "../data/mlData/"  # 內含 data 檔案 ex : train_F390.csv, boruta 檔案 ex :Boruta-featRank-RF.csv
 paramPath = "../data/param/"  # 內含檔案: featureTypeDict.pkl, normalize.pkl
 featureStatPath = '../data/featureStat/'
 mlScorePath = "../data/mlScore/"  # 內含 ml model 預測完並算好分的檔案
 dataName = 'NeuroP_1'
 
-normalizeMethodList = ['standard', 'robust']  # normalization 要跑的兩種方式
+normalizeMethod = ['standard', 'robust']  # normalization 要跑的兩種方式
 
 # ======================================================================================================================
-# 載入 Main_FeatureStk.py 已經 encode 好並存檔的資料
-encodeDS_TrainCsvPath = featureStatPath + f'encode_{dataName}_DS_Train.csv'
-encodeDS_IndpCsvPath = featureStatPath + f'encode_{dataName}_DS_Indp.csv'
-encodeDS_TrainDf = pd.read_csv(encodeDS_TrainCsvPath, index_col=[0])
-encodeDS_IndpDf = pd.read_csv(encodeDS_IndpCsvPath, index_col=[0])
-print(f"讀取 encode 後的資料：DS_Train={encodeDS_TrainDf.shape}, DS_Indp={encodeDS_IndpDf.shape}")
-
 # 讀取 Main_FeatureStk.py 存的 featureTypeDict.json（實際 encode 時用的完整 featureDict，含各參數）
 featureTypeDictJsonPath = paramPath + f'{dataName}_featureTypeDict.json'
 with open(featureTypeDictJsonPath, 'r', encoding='utf-8') as f:
@@ -105,24 +112,36 @@ featureTypeColumnMap = discoverFeatureTypeColumnMap(usedFeatureDict, sampleDataD
 modelNameList = ['lightgbm', 'catboost', 'rbfsvm', 'gbc', 'ridge', 'lr', 'lda', 'ada', 'knn', 'nb', 'et', 'rf',
                  'xgboost', 'mlp', 'dt', 'svm', 'qda']
 
+print(f"use {len(modelNameList)} models")
+
 os.makedirs(mlScorePath, exist_ok=True)
 resultRows = []
 
-for normalizeMethod in normalizeMethodList:
-    trainNmlzCsvPath = featureStatPath + f'train_{dataName}_{normalizeMethod}.csv'
-    indpNmlzCsvPath = featureStatPath + f'indp_{dataName}_{normalizeMethod}.csv'
-    trainNmlzDf = pd.read_csv(trainNmlzCsvPath, index_col=[0])
-    indpNmlzDf = pd.read_csv(indpNmlzCsvPath, index_col=[0])
-    print(f"[{normalizeMethod}] 讀取 normalize 後的資料：DS_Train={trainNmlzDf.shape}, DS_Indp={indpNmlzDf.shape}")
+for normalizeMethod in normalizeMethod:
+    filterTrainNmlzCsvPath = featureStatPath + f'filtered_train_{dataName}_{normalizeMethod}.csv'
+    dataTrainDf = pd.read_csv(filterTrainNmlzCsvPath, index_col=[0])
+    print(f"[{normalizeMethod}] 讀取 filtered 後的資料：dataTrainDf={dataTrainDf.shape}")
 
-    for typeName, columnList in featureTypeColumnMap.items():
-        subTrainDf = trainNmlzDf[columnList + ['y']].copy()
+    for typeName, columnList in featureTypeColumnMap.items(): # 一次挑一種 Feature Type
+        # filtered_train 已被 FeatureStat 過濾掉部分欄位，columnList 是用原始未過濾的 featureDict 反查出來的，
+        # 兩者可能對不上，所以只取仍存在於 dataTrainDf 的欄位，避免 KeyError
+        survivedColumnList = [c for c in columnList if c in dataTrainDf.columns]
+        if not survivedColumnList:
+            print(f"[跳過] {normalizeMethod} + {typeName}：欄位全部被 FeatureStat 過濾掉，無法訓練")
+            resultRows.append({'normalizeMethod': normalizeMethod, 'featureType': typeName,
+                               'model': None, 'mcc': None, 'error': 'all columns filtered out'})
+            continue
+        if len(survivedColumnList) < len(columnList):
+            print(f"[提醒] {normalizeMethod} + {typeName}：{len(columnList) - len(survivedColumnList)} 欄"
+                  f"被 FeatureStat 過濾掉，剩餘 {len(survivedColumnList)} 欄")
+        subTrainDf = dataTrainDf[survivedColumnList + ['y']].copy() # 篩選該feature type 之 feature
 
         pycObj = PycaretWrapper()
         pycObj.doSetup(trainData=subTrainDf, sessionID=42)
 
-        for modelName in modelNameList:
+        for modelName in modelNameList: # 每個 model 逐一嘗試
             try:
+                # 進行一對一訓練
                 tunedModelList, tunerList = pycObj.doTuneModel(searchLibrary='optuna', searchAlg='tpe',
                                                                 includeModelList=[modelName], foldNum=5,
                                                                 n_iter=10, early_stopping=False, customGridDict=None)
@@ -140,29 +159,3 @@ resultDf = pd.DataFrame(resultRows)
 resultCsvPath = mlScorePath + f'featureType_model_mccScore_{dataName}.csv'
 resultDf.to_csv(resultCsvPath, index=False)
 print(f"每個 normalizeMethod × feature type × model 的 MCC 分數已儲存到 {resultCsvPath}")
-
-# # ======================================================================================================================
-# # normalization：分別跑 standard 與 robust 兩種方式
-# for normalizeMethod in normalizeMethodList:
-#     nmlzScalerPath = paramPath + f'{dataName}_{normalizeMethod}Scaler.pkl'
-
-#     trainNmlzDf = encodeObj.dataNormalization(encodeTrainDf=encodeTrainDf,
-#                                               encodeIndpDf=None,  # train scaler存起來 ，indp 另外做
-#                                               normalization=normalizeMethod,
-#                                               saveNmlzScalerPklPath=nmlzScalerPath,
-#                                               loadNmlzScalerPklPath=None,
-#                                               b_loadPkl=False)  # True: 讀取 NmlzScaler 的 pkl 檔 (loadNmlzScalerPklPath)
-#     # False: 把 NmlzScaler 存至 pkl 檔 (saveNmlzScalerPklPath)
-
-#     indpNmlzDf = encodeObj.dataNormalization(encodeTrainDf=None,
-#                                              encodeIndpDf=encodeIndpDf,
-#                                              normalization=normalizeMethod,
-#                                              saveNmlzScalerPklPath=None,
-#                                              loadNmlzScalerPklPath=nmlzScalerPath,
-#                                              b_loadPkl=True)  # indp test set 永遠使用 training set 存好的 NmlzScaler.pkl 檔
-
-#     trainNmlzCsvPath = featureStatPath + f'train_{dataName}_{normalizeMethod}.csv'
-#     indpNmlzCsvPath = featureStatPath + f'indp_{dataName}_{normalizeMethod}.csv'
-
-#     trainNmlzDf.to_csv(trainNmlzCsvPath)
-#     indpNmlzDf.to_csv(indpNmlzCsvPath)
