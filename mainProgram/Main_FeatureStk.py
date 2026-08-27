@@ -492,7 +492,7 @@ for normalizeMethod in normalizeMethodList:
     filterTrainNmlzPath = featureStatPath + f'filtered_train_{dataName}_{normalizeMethod}.csv'  # 過濾完 feature 後的 nmlz 訓練資料
     filterIndpNmlzPath = featureStatPath + f'filtered_indp_{dataName}_{normalizeMethod}.csv'  # DS_Indp 同步 drop 掉跟訓練集一樣的 feature 後的資料
     removeFeatureListPath = featureStatPath + f'remove_feature_list_{dataName}_{normalizeMethod}.json'  # 被過濾掉的 feature 名稱清單
-    removeFeatureTypeListPath = featureStatPath + f'remove_featureType_list_{dataName}_{normalizeMethod}.json'  # 被過濾掉的 feature，依所屬 feature type 分組的清單
+    featureTypeFilterSummaryPath = featureStatPath + f'featureType_filterSummary_{dataName}_{normalizeMethod}.csv'  # 各 feature type 過濾前後的 feature 數量統計
     filteredTrainNmlzDf.to_csv(filterTrainNmlzPath)
 
     filteredIndpNmlzDf = indpNmlzDf.drop(columns=removeList)  # DS_Indp 用訓練集算出的 removeList 同步過濾，欄位才會跟訓練集一致
@@ -501,13 +501,23 @@ for normalizeMethod in normalizeMethodList:
     with open(removeFeatureListPath, 'w', encoding='utf-8') as f:
         json.dump(removeList, f, ensure_ascii=False, indent=2)
 
-    removeFeatureTypeDict = {}
-    for column in removeList:
+    featureSizeByType = {}
+    for column in trainNmlzDf.columns:
         typeName = columnToFeatureType.get(column, 'unknown')
-        removeFeatureTypeDict.setdefault(typeName, []).append(column)
-    with open(removeFeatureTypeListPath, 'w', encoding='utf-8') as f:
-        json.dump(removeFeatureTypeDict, f, ensure_ascii=False, indent=2)
+        featureSizeByType[typeName] = featureSizeByType.get(typeName, 0) + 1
 
-    print(f"[{normalizeMethod}] Feature Stat 過濾完成，共過濾掉 {len(removeList)} 個 feature（分屬 {len(removeFeatureTypeDict)} 個 feature type），"
+    featureSizeAfterFilterByType = {}
+    for column in filteredTrainNmlzDf.columns:
+        typeName = columnToFeatureType.get(column, 'unknown')
+        featureSizeAfterFilterByType[typeName] = featureSizeAfterFilterByType.get(typeName, 0) + 1
+
+    with open(featureTypeFilterSummaryPath, 'w', encoding='utf-8', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Type', 'Feature Type', 'Feature Size', 'Feature Number After Filtering'])
+        for typeName, featureSize in featureSizeByType.items():
+            writer.writerow([normalizeMethod, typeName, featureSize, featureSizeAfterFilterByType.get(typeName, 0)])
+
+    removedFeatureTypeCount = len({columnToFeatureType.get(column, 'unknown') for column in removeList})
+    print(f"[{normalizeMethod}] Feature Stat 過濾完成，共過濾掉 {len(removeList)} 個 feature（分屬 {removedFeatureTypeCount} 個 feature type），"
           f"剩餘 {filteredTrainNmlzDf.shape[1]} 欄，結果已儲存到 {filterTrainNmlzPath}、{filterIndpNmlzPath}、"
-          f"{removeFeatureListPath} 與 {removeFeatureTypeListPath}")
+          f"{removeFeatureListPath} 與 {featureTypeFilterSummaryPath}")
