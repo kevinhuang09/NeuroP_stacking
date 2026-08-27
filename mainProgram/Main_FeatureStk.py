@@ -136,7 +136,7 @@ def buildOVPC_GAAC_formulaFeatureDict():
     newFeatureDict['ampFeature']['formula'] = False
     newFeatureDict['ovpFeature']['OVPC'] = False
 
-    newFeatureDict['mergedFeature'] = {'OVPC_GAAC_formula': True}
+    newFeatureDict['mergedFeature'] = {'OVPC,GAAC,formula': True}
 
     return newFeatureDict
 
@@ -169,9 +169,9 @@ def buildSingleValueCombineFeatureDict():
                         sub_dict[feat] = False
 
     # 在 mergedFeature 加入合併開關 (避免覆蓋已存在的 mergedFeature)
-    if 'mergedFeature' not in newFeatureDict:
-        newFeatureDict['mergedFeature'] = {}
-    newFeatureDict['mergedFeature']['SingleValueCombine'] = True
+    # if 'mergedFeature' not in newFeatureDict:
+    #     newFeatureDict['mergedFeature'] = {}
+    newFeatureDict['mergedFeature'][f'{",".join(map(str, SINGLE_VALUE_FEATURE_NAME_LIST))}'] = True
 
     return newFeatureDict
 
@@ -375,8 +375,8 @@ SINGLE_VALUE_COMBINE_COLUMN_LIST = [
 ]
 
 mergedFeatureColumnMap = {
-    'mergedFeature.OVPC_GAAC_formula': OVPC_GAAC_FORMULA_COLUMN_LIST,
-    'mergedFeature.SingleValueCombine': SINGLE_VALUE_COMBINE_COLUMN_LIST,
+    'mergedFeature.OVPC,GAAC,formula': OVPC_GAAC_FORMULA_COLUMN_LIST,
+    f'mergedFeature.{",".join(map(str, SINGLE_VALUE_FEATURE_NAME_LIST))}': SINGLE_VALUE_COMBINE_COLUMN_LIST,
 }
 
 # 建立 feature type 名稱 -> 欄位名稱清單 的對照表（合併後最終使用的 33 類 feature type），
@@ -387,15 +387,41 @@ columnToFeatureType = {column: typeName for typeName, columnList in featureTypeC
 # 33 類 feature type 明細表：Feature Type, feature size；只有 mergedFeature 底下這兩個合併後的 type，
 # 以及 feature size 剛好等於 1 的 type，才列出實際包含的欄位名稱（逗號分隔）
 featureTypeTablePath = featureStatPath + f'featureType_featureName_table_{dataName}.csv'
+
+# 33 類 feature type 明細表（轉為橫向輸出）
+featureTypeTablePath = featureStatPath + f'featureType_featureName_table_{dataName}.csv'
+
+# 1. 取得原始的所有 Key
+all_keys = list(featureTypeColumnMap.keys())
+
+# 2. 拆分成「非 mergedFeature」與「mergedFeature」，再重組（merged 移到最後面）
+other_keys = [k for k in all_keys if not k.startswith('mergedFeature')]
+merged_keys = [k for k in all_keys if k.startswith('mergedFeature')]
+ordered_keys = other_keys + merged_keys
+
+# 3. 依照新順序建立橫向 CSV
+featureTypeTablePath = featureStatPath + f'featureType_featureName_table_{dataName}.csv'
+featureTypesRow = ['Feature Type']
+featureSizesRow = ['feature size']
+
+for typeName in ordered_keys:
+    columnList = featureTypeColumnMap[typeName]
+    if typeName in mergedFeatureColumnMap:
+        columnList = mergedFeatureColumnMap[typeName]
+    
+    # 移除 mergedFeature. 前綴
+    # displayName = typeName.replace('mergedFeature.', '')
+    displayName = typeName.split('.')[-1]
+
+    featureTypesRow.append(displayName)
+    featureSizesRow.append(len(columnList))
+
+# 4. 寫入 CSV
 with open(featureTypeTablePath, 'w', encoding='utf-8', newline='') as f:
     writer = csv.writer(f)
-    writer.writerow(['Feature Type', 'feature size', 'feature name'])
-    for typeName, columnList in featureTypeColumnMap.items():
-        if typeName in mergedFeatureColumnMap:  # merged type 用加總後的真實欄位取代原本 encode 出來的空清單
-            columnList = mergedFeatureColumnMap[typeName]
-        needFeatureName = typeName.startswith('mergedFeature.') or len(columnList) == 1
-        featureNameField = ','.join(columnList) if needFeatureName else ''
-        writer.writerow([typeName, len(columnList), featureNameField])
+    writer.writerow(featureTypesRow)
+    writer.writerow(featureSizesRow)
+
 print(f"{len(featureTypeColumnMap)} 類 feature type 明細表已儲存到 {featureTypeTablePath}")
 
 # 儲存這三步驟的 feature type 數量統計到 csv 中
