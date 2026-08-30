@@ -120,7 +120,7 @@ featureDict = {'iFeature': ifeatureDict,
                'pFeature': PfeatureDict,
                'ampFeature': AMPfeatureDict,
                'ovpFeature': OVPfeatureDict,
-               'motifBitVecFeature': MotifBitVecfeatureDict,
+            #    'motifBitVecFeature': MotifBitVecfeatureDict,
                'centerGDPFeature': centerGDPDict}
 
 

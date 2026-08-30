@@ -109,6 +109,7 @@ sampleSeqDict = dict(zip(DS_TrainSeqDf['name'].head(5), DS_TrainSeqDf['sequence'
 sampleDataDict = {0: sampleSeqDict, 1: None, -1: None}
 
 featureTypeColumnMap = discoverFeatureTypeColumnMap(usedFeatureDict, sampleDataDict)
+print(f"use {len(featureTypeColumnMap)} feature types")
 
 # ======================================================================================================================
 # 每一個 normalize 方式 × 每一個 feature type × 每一個 model 做一對一訓練（Optuna TPE tune，5-fold CV，用 MCC 當優化目標）
