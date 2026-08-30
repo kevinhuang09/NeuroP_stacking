@@ -27,6 +27,8 @@ import copy
 import csv
 import json
 import pandas as pd
+from openpyxl import load_workbook
+from openpyxl.styles import Alignment
 
 from sklearn.model_selection import train_test_split
 
@@ -269,6 +271,25 @@ def saveFeatureTypeFilterSummary(enable, orderedKeys, featureTypeColumnMap, merg
 
     summaryDf = pd.DataFrame(rows, columns=['type', 'feature type', 'feature size', 'feature number after filtering'])
     summaryDf.to_excel(savePath, index=False)
+
+    # 把 type 欄位中連續重複的值合併儲存格並置中（跨欄置中）
+    wb = load_workbook(savePath)
+    ws = wb.active
+    typeCol = 1  # 'type' 為第 1 欄
+    headerRowOffset = 2  # 第 1 列為標題，資料從第 2 列開始
+    centerAlign = Alignment(horizontal='center', vertical='center')
+
+    startIdx = 0
+    for i in range(1, len(rows) + 1):
+        if i == len(rows) or rows[i][0] != rows[startIdx][0]:
+            startRow = startIdx + headerRowOffset
+            endRow = (i - 1) + headerRowOffset
+            if endRow > startRow:
+                ws.merge_cells(start_row=startRow, start_column=typeCol, end_row=endRow, end_column=typeCol)
+            ws.cell(row=startRow, column=typeCol).alignment = centerAlign
+            startIdx = i
+    wb.save(savePath)
+
     print(f"feature type 過濾摘要已儲存到 {savePath}")
 
 # ======================================================================================================================
