@@ -107,7 +107,7 @@ OVPfeatureDict = {"OVPC": True,
                   "OVP": [True, 4, 4]  # 兩個數為 N, C 端胺基酸數目  N= C=
                   }
 
-MotifBitVecfeatureDict = {"Usage": True,
+MotifBitVecfeatureDict = {"Usage": False,
                           "motifList": ['FKK', 'LKL', 'KKLL', 'KWK', 'VLK',
                                         'CY'
                                         ''
@@ -200,7 +200,7 @@ def buildAllOffFeatureDict(baseDict):
                 value[0] = False
             else:
                 offDict[groupName][key] = False
-    # offDict['motifBitVecFeature']['Usage'] = False
+    offDict['motifBitVecFeature']['Usage'] = False
     offDict['centerGDPFeature']['Usage'] = False
     return offDict
 
@@ -213,8 +213,8 @@ def getRealEnabledFeatureTypeList(featureDict):
         for key, value in featureDict[groupName].items():
             if value is True or (isinstance(value, list) and value[0] is True):
                 enabledList.append((groupName, key))
-    # if featureDict['motifBitVecFeature'].get('Usage') is True:
-    #     enabledList.append(('motifBitVecFeature', 'Usage'))
+    if featureDict['motifBitVecFeature'].get('Usage') is True:
+        enabledList.append(('motifBitVecFeature', 'Usage'))
     if featureDict['centerGDPFeature'].get('Usage') is True:
         enabledList.append(('centerGDPFeature', 'Usage'))
     return enabledList
