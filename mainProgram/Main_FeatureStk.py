@@ -120,7 +120,6 @@ featureDict = {'iFeature': ifeatureDict,
                'pFeature': PfeatureDict,
                'ampFeature': AMPfeatureDict,
                'ovpFeature': OVPfeatureDict,
-            #    'motifBitVecFeature': MotifBitVecfeatureDict,
                'centerGDPFeature': centerGDPDict}
 
 
@@ -201,7 +200,7 @@ def buildAllOffFeatureDict(baseDict):
                 value[0] = False
             else:
                 offDict[groupName][key] = False
-    offDict['motifBitVecFeature']['Usage'] = False
+    # offDict['motifBitVecFeature']['Usage'] = False
     offDict['centerGDPFeature']['Usage'] = False
     return offDict
 
@@ -214,8 +213,8 @@ def getRealEnabledFeatureTypeList(featureDict):
         for key, value in featureDict[groupName].items():
             if value is True or (isinstance(value, list) and value[0] is True):
                 enabledList.append((groupName, key))
-    if featureDict['motifBitVecFeature'].get('Usage') is True:
-        enabledList.append(('motifBitVecFeature', 'Usage'))
+    # if featureDict['motifBitVecFeature'].get('Usage') is True:
+    #     enabledList.append(('motifBitVecFeature', 'Usage'))
     if featureDict['centerGDPFeature'].get('Usage') is True:
         enabledList.append(('centerGDPFeature', 'Usage'))
     return enabledList
