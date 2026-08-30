@@ -2,7 +2,6 @@ from devPackage.PackageModelAmp import EncodeModelAmp
 from devPackage.PackageiFeature import iFeature
 from devPackage.PackagePFeature import PFeature
 from devPackage.OVP import OVP
-from devPackage.MotifBitVec import MotifBitVec
 from devPackage.PackageBoruta import BorutaPackage
 from devPackage.Normalization import Normalization
 import pandas as pd
@@ -38,18 +37,15 @@ class EncodeAllFeatures:
                 epfObj = PFeature(inputData, self.featureDict['pFeature'])
                 emaObj = EncodeModelAmp(inputData, self.featureDict['ampFeature'])  # windows 拉出去dict
                 eovpObj = OVP(inputData, self.featureDict['ovpFeature'])
-                embvObj = MotifBitVec(inputData, self.featureDict['motifBitVecFeature'])
                 eigObj = centerGDP(inputData, self.featureDict['centerGDPFeature'])
                 a = eifObj.getOutputDf()
                 b = epfObj.getOutputDf()
                 c = emaObj.getOutputDf()
                 d = eovpObj.getOutputDf()
-                e = embvObj.getOutputDf()
                 g = eigObj.getOutputDf()
                 encodedDf = pd.concat([a, b], axis=1)
                 encodedDf = pd.concat([encodedDf, c], axis=1)
                 encodedDf = pd.concat([encodedDf, d], axis=1)
-                encodedDf = pd.concat([encodedDf, e], axis=1)
                 encodedDf = pd.concat([encodedDf, g], axis=1)
                 encodedDf.insert(encodedDf.shape[1], 'y', label)
                 encodedDfList.append(encodedDf)
