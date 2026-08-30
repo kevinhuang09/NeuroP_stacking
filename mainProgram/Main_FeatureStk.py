@@ -26,6 +26,7 @@ setupParentPath(useVscodeParentPath)
 import copy
 import csv
 import json
+import pandas as pd
 
 from sklearn.model_selection import train_test_split
 
@@ -246,6 +247,30 @@ def discoverFeatureTypeColumnMap(featureDict, sampleDataDict):
 
     return featureTypeColumnMap
 
+def saveFeatureTypeFilterSummary(enable, orderedKeys, featureTypeColumnMap, mergedFeatureColumnMap, removeList, savePath):
+    """
+    輸出 feature type 過濾前後數量摘要 xlsx，欄位依序為 type(所屬群組, 如 iFeature)、
+    feature type(如 AAC)、feature size(過濾前欄位數)、feature number after filtering(過濾後剩餘欄位數)。
+    enable=False 時直接跳過，不產生檔案。
+    """
+    if not enable:
+        return
+
+    removeSet = set(removeList)
+    rows = []
+    for typeName in orderedKeys:
+        columnList = featureTypeColumnMap[typeName]
+        if typeName in mergedFeatureColumnMap:
+            columnList = mergedFeatureColumnMap[typeName]
+        groupName, displayName = typeName.split('.', 1)
+        featureSize = len(columnList)
+        afterFilterSize = sum(1 for column in columnList if column not in removeSet)
+        rows.append([groupName, displayName, featureSize, afterFilterSize])
+
+    summaryDf = pd.DataFrame(rows, columns=['type', 'feature type', 'feature size', 'feature number after filtering'])
+    summaryDf.to_excel(savePath, index=False)
+    print(f"feature type 過濾摘要已儲存到 {savePath}")
+
 # ======================================================================================================================
 # 基本路徑
 mlDataPath = "../data/mlData/"  # 內含 data 檔案 ex : train_F390.csv, boruta 檔案 ex :Boruta-featRank-RF.csv
@@ -254,6 +279,8 @@ featureStatPath = '../data/featureStat/'
 dataName = 'NeuroP_1'
 
 normalizeMethodList = ['standard', 'robust']  # normalization 要跑的兩種方式
+
+b_saveFeatureTypeFilterSummary = True  # 是否輸出 featureType_filterSummary_{dataName}_{normalizeMethod}.xlsx
 
 # DataSet載入區
 # 載入Main Dataset
@@ -524,6 +551,14 @@ for normalizeMethod in normalizeMethodList:
         removeFeatureTypeDict.setdefault(typeName, []).append(column)
     with open(removeFeatureTypeListPath, 'w', encoding='utf-8') as f:
         json.dump(removeFeatureTypeDict, f, ensure_ascii=False, indent=2)
+
+    featureTypeFilterSummaryPath = featureStatPath + f'featureType_filterSummary_{dataName}_{normalizeMethod}.xlsx'
+    saveFeatureTypeFilterSummary(enable=b_saveFeatureTypeFilterSummary,
+                                 orderedKeys=ordered_keys,
+                                 featureTypeColumnMap=featureTypeColumnMap,
+                                 mergedFeatureColumnMap=mergedFeatureColumnMap,
+                                 removeList=removeList,
+                                 savePath=featureTypeFilterSummaryPath)
 
     print(f"[{normalizeMethod}] Feature Stat 過濾完成，共過濾掉 {len(removeList)} 個 feature（分屬 {len(removeFeatureTypeDict)} 個 feature type），"
           f"剩餘 {filteredTrainNmlzDf.shape[1]} 欄，結果已儲存到 {filterTrainNmlzPath}、{filterIndpNmlzPath}、{filterValNmlzPath}、"
