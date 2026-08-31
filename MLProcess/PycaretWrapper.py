@@ -20,12 +20,17 @@ class PycaretWrapper:
         :return:
         """
         if needTrain:
+            # 明確指定所有 feature 欄位為 numeric_features，避免 pycaret 的自動型別推斷
+            # 把數值範圍/唯一值較少的欄位誤判成 category，導致 xgboost/lightgbm 收到
+            # category dtype 而報錯：DMatrix parameter `enable_categorical` must be set to True.
+            numericFeatureList = [col for col in trainData.columns if col != 'y']
             self.model = setup(data=trainData,
                                test_data=testData,
                                train_size=train_size,
                                target='y',
                                feature_selection=False,
                                normalize=False,
+                               numeric_features=numericFeatureList,
                                silent=True,
                                preprocess=False,
                                session_id=sessionID)

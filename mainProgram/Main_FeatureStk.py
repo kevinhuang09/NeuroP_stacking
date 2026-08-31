@@ -1,3 +1,11 @@
+# ======================================================================================================================
+# 所有功能開關 (bool)，統一放在檔案最前面方便控制
+disablePlotPopup = True  # 是否禁止彈出圖表視窗
+useVscodeParentPath = True  # 使用pycharm, vscode進行編譯請開啟
+b_saveFastaSeqCountStat = True  # 是否印出並儲存 fasta 序列數量統計
+b_saveFeatureTypeFilterSummary = True  # 是否輸出 featureType_filterSummary_{dataName}_{normalizeMethod}.xlsx
+# ======================================================================================================================
+
 import matplotlib
 
 def setMatplotlibBackend(disablePopup):
@@ -5,14 +13,13 @@ def setMatplotlibBackend(disablePopup):
     if disablePopup:
         matplotlib.use('Agg')
 
-disablePlotPopup = True  # 是否禁止彈出圖表視窗
 setMatplotlibBackend(disablePlotPopup)
 
 import sys, os
 
 def setupParentPath(enableVscodeParentPath):
     """
-    enableVscodeParentPath=True: 
+    enableVscodeParentPath=True:
     使用Pycharm, Vscode進行編譯時，把上一層目錄加入sys.path，方便import套件
     """
     if enableVscodeParentPath:
@@ -20,7 +27,6 @@ def setupParentPath(enableVscodeParentPath):
         parent = os.path.join(current_dir, "..")
         sys.path.append(parent)
 
-useVscodeParentPath = True  # 使用pycharm, vscode進行編譯請開啟
 setupParentPath(useVscodeParentPath)
 
 import copy
@@ -299,9 +305,27 @@ paramPath = "../data/param/"  # 內含檔案: featureTypeDict.pkl, normalize.pkl
 featureStatPath = '../data/featureStat/'
 dataName = 'NeuroP_1'
 
-normalizeMethodList = ['standard', 'robust']  # normalization 要跑的兩種方式
+normalizeMethodList = ['standard']  # normalization 目前先用standard 可自行改list
 
-b_saveFeatureTypeFilterSummary = True  # 是否輸出 featureType_filterSummary_{dataName}_{normalizeMethod}.xlsx
+def saveFastaSeqCountStat(enable, fastaStatPath, statItems, statLabel='Fasta', fileMode='w', writeHeader=True):
+    """
+    印出並儲存目前序列數量統計。
+    statItems: [(label, csvName, seqDict), ...]，label 用於印出訊息，csvName 為寫入 csv 的檔名/欄位名稱
+    fileMode='w' 會覆寫並寫入表頭，'a' 則接續寫在同一份 csv 後面（不重寫表頭）。
+    enable=False 時跳過印出與存檔。
+    """
+    if not enable:
+        return
+
+    statSummary = ", ".join(f"{label}: {len(seqDict)}" for label, _, seqDict in statItems)
+    print(f"[{statLabel} 統計] {statSummary}")
+
+    with open(fastaStatPath, fileMode, encoding='utf-8') as f:
+        if writeHeader:
+            f.write("file,count\n")
+        for _, csvName, seqDict in statItems:
+            f.write(f"{csvName},{len(seqDict)}\n")
+    print(f"{statLabel} 數量統計已儲存到{fastaStatPath}中")
 
 # DataSet載入區
 # 載入Main Dataset
@@ -318,19 +342,16 @@ MainDatasetPosSeqDict = ldObj.readFasta(MainDatasetPosFastaPath)
 DS_IndpNegSeqDict = ldObj.readFasta(DS_IndpNegFastaPath)
 DS_IndpPosSeqDict = ldObj.readFasta(DS_IndpPosFastaPath)
 
-# 印出當前序列數量做確認
-print(f"[Fasta 統計] MainDatasetNeg: {len(MainDatasetNegSeqDict)}, MainDatasetPos: {len(MainDatasetPosSeqDict)}, "
-      f"DS_IndpNeg: {len(DS_IndpNegSeqDict)}, DS_IndpPos: {len(DS_IndpPosSeqDict)}")
-
-# 儲存序列數量統計到 data/ 中
+# 印出並儲存當前序列數量統計
 fastaStatPath = "../data/fasta_seq_count.csv"
-with open(fastaStatPath, 'w', encoding='utf-8') as f:
-    f.write("file,count\n")
-    f.write(f"{os.path.basename(MainDatasetNegFastaPath)},{len(MainDatasetNegSeqDict)}\n")
-    f.write(f"{os.path.basename(MainDatasetPosFastaPath)},{len(MainDatasetPosSeqDict)}\n")
-    f.write(f"{os.path.basename(DS_IndpNegFastaPath)},{len(DS_IndpNegSeqDict)}\n")
-    f.write(f"{os.path.basename(DS_IndpPosFastaPath)},{len(DS_IndpPosSeqDict)}\n")
-print(f"序列數量統計已儲存到{fastaStatPath}中")
+saveFastaSeqCountStat(enable=b_saveFastaSeqCountStat,
+                      fastaStatPath=fastaStatPath,
+                      statItems=[
+                          ('MainDatasetNeg', os.path.basename(MainDatasetNegFastaPath), MainDatasetNegSeqDict),
+                          ('MainDatasetPos', os.path.basename(MainDatasetPosFastaPath), MainDatasetPosSeqDict),
+                          ('DS_IndpNeg', os.path.basename(DS_IndpNegFastaPath), DS_IndpNegSeqDict),
+                          ('DS_IndpPos', os.path.basename(DS_IndpPosFastaPath), DS_IndpPosSeqDict),
+                      ])
 
 # ======================================================================================================================
 # 將 MainDataset 依 9:1 切分為 DS_Train / DS_Val（neg, pos 各自切分以維持類別比例）
@@ -345,16 +366,18 @@ def splitSeqDict(seqDict, test_size, random_state):
 DS_TrainNegSeqDict, DS_ValNegSeqDict = splitSeqDict(MainDatasetNegSeqDict, splitTestSize, splitRandomState)
 DS_TrainPosSeqDict, DS_ValPosSeqDict = splitSeqDict(MainDatasetPosSeqDict, splitTestSize, splitRandomState)
 
-print(f"[DS_Train/DS_Val 統計] DS_TrainNeg: {len(DS_TrainNegSeqDict)}, DS_TrainPos: {len(DS_TrainPosSeqDict)}, "
-      f"DS_ValNeg: {len(DS_ValNegSeqDict)}, DS_ValPos: {len(DS_ValPosSeqDict)}")
-
-# 儲存 DS_Train/DS_Val 數量統計到同一份 csv 中
-with open(fastaStatPath, 'a', encoding='utf-8') as f:
-    f.write(f"DS_TrainNeg,{len(DS_TrainNegSeqDict)}\n")
-    f.write(f"DS_TrainPos,{len(DS_TrainPosSeqDict)}\n")
-    f.write(f"DS_ValNeg,{len(DS_ValNegSeqDict)}\n")
-    f.write(f"DS_ValPos,{len(DS_ValPosSeqDict)}\n")
-print(f"DS_Train/DS_Val 數量統計已儲存到{fastaStatPath}中")
+# 印出並儲存 DS_Train/DS_Val 數量統計（接續寫在同一份 fasta_seq_count.csv 中）
+saveFastaSeqCountStat(enable=b_saveFastaSeqCountStat,
+                      fastaStatPath=fastaStatPath,
+                      statLabel='DS_Train/DS_Val',
+                      fileMode='a',
+                      writeHeader=False,
+                      statItems=[
+                          ('DS_TrainNeg', 'DS_TrainNeg', DS_TrainNegSeqDict),
+                          ('DS_TrainPos', 'DS_TrainPos', DS_TrainPosSeqDict),
+                          ('DS_ValNeg', 'DS_ValNeg', DS_ValNegSeqDict),
+                          ('DS_ValPos', 'DS_ValPos', DS_ValPosSeqDict),
+                      ])
 
 DS_TrainDataDict = {0 : DS_TrainNegSeqDict, 1 : DS_TrainPosSeqDict, -1 : None}
 DS_IndpDataDict = {0 : DS_IndpNegSeqDict, 1 : DS_IndpPosSeqDict, -1 : None}
