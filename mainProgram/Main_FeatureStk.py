@@ -408,6 +408,13 @@ saveDataDictToCsv(DS_ValDataDict, DS_ValCsvPath)
 count, names = countEnabledFeatureType(featureDict)
 print(f"featureDict 啟用的 feature type 數量: {count}")
 
+# 保留合併前、所有開關都還是真實狀態的版本，實際 encode 一定要用這份：
+# buildOVPC_GAAC_formulaFeatureDict / buildSingleValueCombineFeatureDict 只是把 OVPC/GAAC/formula
+# 與 27 個單一數值特徵「重新標記」成一個 mergedFeature 開關，方便統計 feature type 數量與報表顯示；
+# 但 Package_Encode.py 不認得 mergedFeature 這個 key，若拿合併後、個別開關已被關掉的版本去 encode，
+# 這些欄位會整個消失（等於 merge 掉的 feature type 完全沒有資料可以訓練）。
+originalFeatureDict = copy.deepcopy(featureDict)
+
 featureDict = buildOVPC_GAAC_formulaFeatureDict()
 count2, names2 = countEnabledFeatureType(featureDict)
 print(f"OVPC_GAAC_formula 啟用的 feature type 數量: {count2}")
@@ -513,6 +520,10 @@ encodeObj.dataEncodeSetup(saveFeatureDict=featureDict,  # normalization 前傳�
                           saveJsonPath=paramPath + f'{dataName}_featureTypeDict.json',  # 把 featureDict 存至 json 檔
                           loadJsonPath=None,  # 讀取 featureDict 的 pkl 檔
                           b_loadJson=False)  # True: 讀取 featureDict 的 pkl 檔 (loadJsonPath), False: 把 featureDict 存至 pkl 檔 (saveJsonPath)
+
+# json 存的是「合併顯示」版本（給 Main_MLStkLv1.py 判斷有哪些 real enabled feature type 用），
+# 但實際 encode 要換回 originalFeatureDict，OVPC/GAAC/formula/27 個單一數值特徵才會真的產生欄位
+encodeObj.featureDict = originalFeatureDict
 
 encodeDS_TrainDf = encodeObj.dataEncodeOutPut(dataDict = DS_TrainDataDict)
 encodeDS_IndpDf = encodeObj.dataEncodeOutPut(dataDict = DS_IndpDataDict)
