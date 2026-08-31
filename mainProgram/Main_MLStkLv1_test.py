@@ -34,9 +34,11 @@ with open(featureTypeDictJsonPath, 'r', encoding='utf-8') as f:
     usedFeatureDict = json.load(f)
 
 def buildAllOffFeatureDict(baseDict):
-    """把 iFeature/pFeature/ampFeature/ovpFeature/motifBitVecFeature/centerGDPFeature 全部開關關閉，保留其餘參數結構"""
+    """把 iFeature/pFeature/ampFeature/ovpFeature/mergedFeature/motifBitVecFeature/centerGDPFeature 全部開關關閉，保留其餘參數結構"""
     offDict = copy.deepcopy(baseDict)
-    for groupName in ['iFeature', 'pFeature', 'ampFeature', 'ovpFeature']:
+    for groupName in ['iFeature', 'pFeature', 'ampFeature', 'ovpFeature', 'mergedFeature']:
+        if groupName not in offDict:
+            continue
         for key, value in offDict[groupName].items():
             if isinstance(value, list):
                 value[0] = False
@@ -49,7 +51,9 @@ def buildAllOffFeatureDict(baseDict):
 def getRealEnabledFeatureTypeList(featureDict):
     """列出真正會產生欄位的 feature type（(groupName, key) tuple 清單）"""
     enabledList = []
-    for groupName in ['iFeature', 'pFeature', 'ampFeature', 'ovpFeature']:
+    for groupName in ['iFeature', 'pFeature', 'ampFeature', 'ovpFeature', 'mergedFeature']:
+        if groupName not in featureDict:
+            continue
         for key, value in featureDict[groupName].items():
             if value is True or (isinstance(value, list) and value[0] is True):
                 enabledList.append((groupName, key))
@@ -59,6 +63,38 @@ def getRealEnabledFeatureTypeList(featureDict):
         enabledList.append(('centerGDPFeature', 'Usage'))
     return enabledList
 
+# mergedFeature.OVPC_GAAC_formula / mergedFeature.SingleValueCombine 這兩個 type，Package_Encode.py
+# 並不認得 'mergedFeature' 這個 key，直接對它們 encode 只會拿到 0 欄，所以跟 Main_FeatureStk.py 一樣，
+# 用寫死的欄位名稱清單取代掉原本 encode 出來的空清單
+SINGLE_VALUE_FEATURE_NAME_LIST = [
+    "length", "calculate_mw", "calculate_charge", "isoelectric_point",
+    "instability_index", "aromaticity", "aliphatic_index", "hydrophobic",
+    "aasi", "argos", "bulkiness", "charge_phys", "charge_acid",
+    "flexibility", "gravy", "levitt_alpha", "mss", "polarity",
+    "refractivity", "tm_tend", "boman_index", "eisenberg",
+    "hopp_woods", "janin", "kytedoolittle", "SE", "charge_density"
+]
+
+OVPC_GAAC_FORMULA_COLUMN_LIST = [
+    'OVPC_Aromatic', 'OVPC_Negative', 'OVPC_Positive', 'OVPC_Polar', 'OVPC_Hydrophobic',
+    'OVPC_Aliphatic', 'OVPC_Tiny', 'OVPC_Charged', 'OVPC_Small', 'OVPC_Imino_acid',
+    'GAAC_alphatic', 'GAAC_aromatic', 'GAAC_postivecharge', 'GAAC_negativecharge', 'GAAC_uncharge',
+    'formula_C', 'formula_H', 'formula_N', 'formula_O', 'formula_S'
+]
+
+SINGLE_VALUE_COMBINE_COLUMN_LIST = [
+    'Length', 'Calculate_mw', 'Calculate_charge', 'Isoelectric_point',
+    'Instability_index', 'Aromaticity', 'Aliphatic_Index', 'Hydrophobic',
+    'AASI', 'Argos', 'Bulkiness', 'Charge_phys', 'Charge_acid',
+    'Flexibility', 'Gravy', 'Levitt_alpha', 'MSS', 'Polarity',
+    'Refractivity', 'TM_tend', 'Boman_Index', 'Eisenberg',
+    'Hopp_woods', 'Janin', 'Kytedoolittle', 'Shannon-Entropy', 'Charge_density'
+]
+
+mergedFeatureColumnMap = {
+    'mergedFeature.OVPC,GAAC,formula': OVPC_GAAC_FORMULA_COLUMN_LIST,
+    f'mergedFeature.{",".join(map(str, SINGLE_VALUE_FEATURE_NAME_LIST))}': SINGLE_VALUE_COMBINE_COLUMN_LIST,
+}
 
 def discoverFeatureTypeColumnMap(featureDict, sampleDataDict):
     """
@@ -76,12 +112,15 @@ def discoverFeatureTypeColumnMap(featureDict, sampleDataDict):
         else:
             singleFeatureDict[groupName][key] = True
 
-        singleEncodeObj = EncodeAllFeatures()
-        singleEncodeObj.featureDict = singleFeatureDict
-        singleDf = singleEncodeObj.dataEncodeOutPut(dataDict=sampleDataDict)
-        columnList = [c for c in singleDf.columns if c != 'y']
-
         typeName = f'{groupName}.{key}'
+        if typeName in mergedFeatureColumnMap:
+            columnList = mergedFeatureColumnMap[typeName]
+        else:
+            singleEncodeObj = EncodeAllFeatures()
+            singleEncodeObj.featureDict = singleFeatureDict
+            singleDf = singleEncodeObj.dataEncodeOutPut(dataDict=sampleDataDict)
+            columnList = [c for c in singleDf.columns if c != 'y']
+
         featureTypeColumnMap[typeName] = columnList
         print(f"feature type {typeName}: {len(columnList)} 欄")
 
@@ -96,15 +135,18 @@ sampleDataDict = {0: sampleSeqDict, 1: None, -1: None}
 featureTypeColumnMap = discoverFeatureTypeColumnMap(usedFeatureDict, sampleDataDict)
 
 # ------------------------------------------------------------------------------------------------------------------
-# 測試版：只取前 2 個 feature type，快速確認整條流程有沒有錯誤
-featureTypeColumnMap = dict(list(featureTypeColumnMap.items())[:2])
-print(f"[test] 只跑這 2 個 feature type: {list(featureTypeColumnMap.keys())}")
+# 測試版：固定包含兩個 mergedFeature type，其餘補一般 feature type 湊滿 5 個，快速確認整條流程有沒有錯誤
+mergedTypeNameList = [typeName for typeName in featureTypeColumnMap if typeName.startswith('mergedFeature.')]
+otherTypeNameList = [typeName for typeName in featureTypeColumnMap if not typeName.startswith('mergedFeature.')]
+selectedTypeNameList = otherTypeNameList[:5 - len(mergedTypeNameList)] + mergedTypeNameList
+featureTypeColumnMap = {typeName: featureTypeColumnMap[typeName] for typeName in selectedTypeNameList}
+print(f"[test] 只跑這 5 個 feature type: {list(featureTypeColumnMap.keys())}")
 
 # ======================================================================================================================
 # 每一個 normalize 方式 × 每一個 feature type × 每一個 model 做一對一訓練（Optuna TPE tune，5-fold CV，用 MCC 當優化目標）
 # normalize 後的資料是 Main_FeatureStk.py 存好的，這裡只需要讀取
-# 測試版：只用 lightgbm、rf(random forest) 這兩個 model，快速確認有無錯誤
-modelNameList = ['lightgbm', 'rf']
+# 測試版：只用 5 個 model，快速確認有無錯誤
+modelNameList = ['lightgbm', 'rf', 'xgboost', 'lr', 'knn']
 
 os.makedirs(mlScorePath, exist_ok=True)
 resultRows = []
