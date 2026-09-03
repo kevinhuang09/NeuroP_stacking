@@ -29,7 +29,9 @@ def setupParentPath(enableVscodeParentPath):
 setupParentPath(useVscodeParentPath)
 
 import copy
+import json
 from userPackage.Package_Encode import EncodeAllFeatures
+from userPackage.FeatureStat import FeatureStat
 from openpyxl import Workbook
 from openpyxl.styles import Alignment
 
@@ -393,13 +395,21 @@ def getFeatureTypeFileName(typeName):
     return f'{groupName}.{displayName}'
 
 def saveEncodeDfSplitByFeatureType(encodeDf, featureTypeColumnMap, saveDir):
-    """把一份表格依 featureTypeColumnMap 拆分，每個 feature type 各自存成一個 csv（含 y 欄位）"""
+    """
+    把一份表格依 featureTypeColumnMap 拆分，每個 feature type 各自存成一個 csv（含 y 欄位）。
+    欄位若因過濾而不存在於 encodeDf 中會自動略過；一個 feature type 底下欄位全被過濾掉則不輸出該檔案。
+    """
     os.makedirs(saveDir, exist_ok=True)
+    savedCount = 0
     for typeName, columnList in featureTypeColumnMap.items():
-        selectColumnList = columnList + (['y'] if 'y' in encodeDf.columns else [])
+        existColumnList = [c for c in columnList if c in encodeDf.columns]
+        if not existColumnList:
+            continue
+        selectColumnList = existColumnList + (['y'] if 'y' in encodeDf.columns else [])
         typeCsvPath = os.path.join(saveDir, f'{getFeatureTypeFileName(typeName)}.csv')
         encodeDf[selectColumnList].to_csv(typeCsvPath)
-    print(f"{len(featureTypeColumnMap)} 個 feature type 的 csv 已儲存到 {saveDir}")
+        savedCount += 1
+    print(f"{savedCount} 個 feature type 的 csv 已儲存到 {saveDir}")
 
 # ======================================================================================================================
 # Encode
@@ -471,3 +481,51 @@ for normalizeMethod in normalizeMethodList:
     saveEncodeDfSplitByFeatureType(trainNmlzDf, mergedFeatureTypeColumnMap, nmlzFeatureTypeSplitBaseDir + 'DS_Train/')
     saveEncodeDfSplitByFeatureType(indpNmlzDf, mergedFeatureTypeColumnMap, nmlzFeatureTypeSplitBaseDir + 'DS_Indp/')
     saveEncodeDfSplitByFeatureType(valNmlzDf, mergedFeatureTypeColumnMap, nmlzFeatureTypeSplitBaseDir + 'DS_Val/')
+
+    # ==================================================================================================================
+    # Feature Stat 分析：找出數值過度集中（top1percent 過高）的 feature 並過濾掉，MotifBitVec 系列 feature 受保護不被過濾
+    featureStatObj = FeatureStat(dataDf=trainNmlzDf)
+    featureStatObj.sdAnalysis(saveFigPath=featureStatPath + f"sd_analysis_{dataName}_{normalizeMethod}.jpg")
+    featureAnalysisXlsxPath = featureStatPath + f"featureAnalysis_{dataName}_{normalizeMethod}.xlsx"
+    featureStatObj.featureValuePct_analysis(saveFinalExcel=featureAnalysisXlsxPath)
+
+    filteredTrainNmlzDf, removeList = featureStatObj.processData(xlsxPath=featureAnalysisXlsxPath,
+                                                                  columnName='top1percent', number='+0.98',
+                                                                  protectFeatSubstringList=['MotifBitVec'])
+    os.makedirs(mlDataPath, exist_ok=True)
+    featureStatObj.processDataLog(logPath=mlDataPath + f'{dataName}_{normalizeMethod}_')
+
+    filteredIndpNmlzDf = indpNmlzDf.drop(columns=removeList)  # DS_Indp 用訓練集算出的 removeList 同步過濾，欄位才會跟訓練集一致
+    filteredValNmlzDf = valNmlzDf.drop(columns=removeList)  # DS_Val 用訓練集算出的 removeList 同步過濾，欄位才會跟訓練集一致
+
+    # 儲存過濾後的大表格
+    filterTrainNmlzPath = featureStatPath + f'filtered_train_{dataName}_{normalizeMethod}.csv'
+    filterIndpNmlzPath = featureStatPath + f'filtered_indp_{dataName}_{normalizeMethod}.csv'
+    filterValNmlzPath = featureStatPath + f'filtered_val_{dataName}_{normalizeMethod}.csv'
+    filteredTrainNmlzDf.to_csv(filterTrainNmlzPath)
+    filteredIndpNmlzDf.to_csv(filterIndpNmlzPath)
+    filteredValNmlzDf.to_csv(filterValNmlzPath)
+
+    # 被過濾掉的 feature 名稱清單，以及依所屬 feature type 分組的清單
+    removeFeatureListPath = featureStatPath + f'remove_feature_list_{dataName}_{normalizeMethod}.json'
+    with open(removeFeatureListPath, 'w', encoding='utf-8') as f:
+        json.dump(removeList, f, ensure_ascii=False, indent=2)
+
+    columnToFeatureType = {column: typeName for typeName, columnList in mergedFeatureTypeColumnMap.items() for column in columnList}
+    removeFeatureTypeDict = {}
+    for column in removeList:
+        typeName = columnToFeatureType.get(column, 'unknown')
+        removeFeatureTypeDict.setdefault(typeName, []).append(column)
+    removeFeatureTypeListPath = featureStatPath + f'remove_featureType_list_{dataName}_{normalizeMethod}.json'
+    with open(removeFeatureTypeListPath, 'w', encoding='utf-8') as f:
+        json.dump(removeFeatureTypeDict, f, ensure_ascii=False, indent=2)
+
+    print(f"[{normalizeMethod}] Feature Stat 過濾完成，共過濾掉 {len(removeList)} 個 feature（分屬 {len(removeFeatureTypeDict)} 個 feature type），"
+          f"剩餘 {filteredTrainNmlzDf.shape[1]} 欄，結果已儲存到 {filterTrainNmlzPath}、{filterIndpNmlzPath}、{filterValNmlzPath}、"
+          f"{removeFeatureListPath} 與 {removeFeatureTypeListPath}")
+
+    # 依 feature type 拆分過濾後的大表格，每個 feature type 各自存成一個 csv，train/indp/val 各自一個資料夾
+    filteredFeatureTypeSplitBaseDir = featureStatPath + f'featureType_csv_{dataName}_{normalizeMethod}_filtered/'
+    saveEncodeDfSplitByFeatureType(filteredTrainNmlzDf, mergedFeatureTypeColumnMap, filteredFeatureTypeSplitBaseDir + 'DS_Train/')
+    saveEncodeDfSplitByFeatureType(filteredIndpNmlzDf, mergedFeatureTypeColumnMap, filteredFeatureTypeSplitBaseDir + 'DS_Indp/')
+    saveEncodeDfSplitByFeatureType(filteredValNmlzDf, mergedFeatureTypeColumnMap, filteredFeatureTypeSplitBaseDir + 'DS_Val/')
