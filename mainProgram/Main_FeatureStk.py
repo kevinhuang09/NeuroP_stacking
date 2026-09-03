@@ -42,95 +42,16 @@ from userPackage.Package_Encode import EncodeAllFeatures
 from userPackage.LoadDataset import LoadDataset
 from userPackage.FeatureStat import FeatureStat
 
-#  移到外面再把舊的加進空的dict裡面
-ifeatureDict = {"AAC": True,
-                "AAINDEX": False,  # 注意!!需等長
-                "CKSAAGP": [True, 5],
-                "CTDC": True,
-                "CTDD": True,
-                "CTDT": True,
-                "CTriad": True,  # 會產生feature 343個
-                "DDE": True,
-                "DPC": True,
-                "GAAC": True,
-                "GDPC": True,
-                "GTPC": True,
-                "KSCTriad": [True, 0],  # 會產生feature 343個
-                "QSOrder": [False, 30, 0.1],
-                "TPC": False,  # 會有8000個feature 不建議開啟
-                "SOCN": [False, 3],
-                "APAAC": [True, 3, 0.05],
-                "Geary": [True, 3],
-                "Moran": [True, 3],
-                "NMBroto": [True, 3],
-                "CKSAAP": [True, 3],  # 會產生feature 1600個
-                "BINARY": False,  # 注意!!需等長
-                "PAAC": [True, 3, 0.05]
-                }
 
-PfeatureDict = {"DDOR": True,
-                "RRI": True,
-                "SER": True,
-                "SEP": True,
-                "SE": True,
-                "QSO": [True, 3, 0.1]
-                }  # gap=3 w=0.1
-
-AMPfeatureDict = {"length": True,
-                  "calculate_mw": [True, True],  # [0] = on(True)/off [1] = amide
-                  "calculate_charge": [True, 7, True],  # [0] = on(True)/off [1] = ph, [2] = amide
-                  "charge_density": [True, 7, True],  # [0] = on(True)/off [1] = ph, [2] = amide
-                  "isoelectric_point": [True, True],  # [0] = on(True)/off [1] = amide
-                  "instability_index": True,
-                  "aromaticity": True,
-                  "aliphatic_index": True,
-                  "hydrophobic": True,
-                  "aasi": True,
-                  "abhprk": [True, 5],  # [0] = on(True)/off [1] = window
-                  "argos": True,
-                  "bulkiness": True,
-                  "charge_phys": True,
-                  "charge_acid": True,
-                  "cougar": [True, 5],  # [0] = on(True)/off [1] = window
-                  "ez": [True, 5],  # [0] = on(True)/off [1] = window
-                  "flexibility": True,
-                  "gravy": True,
-                  "levitt_alpha": True,
-                  "mss": True,
-                  "msw": [True, 5],  # [0] = on(True)/off [1] = window
-                  "pepArc": True,
-                  "polarity": True,
-                  "refractivity": True,
-                  "tm_tend": True,
-                  "z3": [True, 5],  # [0] = on(True)/off [1] = window
-                  "z5": [True, 5],  # [0] = on(True)/off [1] = window
-                  "formula": True,  # C,H,N,O,S atom composition
-                  "boman_index": True,
-                  "eisenberg": True,
-                  "hopp_woods": True,
-                  "janin": True,
-                  "kytedoolittle": True
-                  }
-
-OVPfeatureDict = {"OVPC": True,
-                  "OVP": [True, 4, 4]  # 兩個數為 N, C 端胺基酸數目  N= C=
-                  }
-
-MotifBitVecfeatureDict = {"Usage": False,
-                          "motifList": ['FKK', 'LKL', 'KKLL', 'KWK', 'VLK',
-                                        'CY'
-                                        ''
-                                        'CR', 'CRR', 'RFC', 'RRR', 'LKKL']
-                          }
-
-centerGDPDict = {"Usage": False, "UseGap": False, "gap_size": -1}  # 若是預測每個 amino acid 的 label 在使用
-
-featureDict = {'iFeature': ifeatureDict,
-               'pFeature': PfeatureDict,
-               'ampFeature': AMPfeatureDict,
-               'ovpFeature': OVPfeatureDict,
-               'centerGDPFeature': centerGDPDict}
-
+from userPackage.FeatureConfig import (
+    ifeatureDict,
+    PfeatureDict,
+    AMPfeatureDict,
+    OVPfeatureDict,
+    MotifBitVecfeatureDict,
+    centerGDPDict,
+    featureDict,
+)
 
 def buildOVPC_GAAC_formulaFeatureDict():
     """
@@ -411,210 +332,210 @@ print(f"featureDict 啟用的 feature type 數量: {count}")
 # 保留合併前、所有開關都還是真實狀態的版本，實際 encode 一定要用這份：
 # buildOVPC_GAAC_formulaFeatureDict / buildSingleValueCombineFeatureDict 只是把 OVPC/GAAC/formula
 # 與 27 個單一數值特徵「重新標記」成一個 mergedFeature 開關，方便統計 feature type 數量與報表顯示；
-# 但 Package_Encode.py 不認得 mergedFeature 這個 key，若拿合併後、個別開關已被關掉的版本去 encode，
-# 這些欄位會整個消失（等於 merge 掉的 feature type 完全沒有資料可以訓練）。
-originalFeatureDict = copy.deepcopy(featureDict)
+# # 但 Package_Encode.py 不認得 mergedFeature 這個 key，若拿合併後、個別開關已被關掉的版本去 encode，
+# # 這些欄位會整個消失（等於 merge 掉的 feature type 完全沒有資料可以訓練）。
+# originalFeatureDict = copy.deepcopy(featureDict)
 
-featureDict = buildOVPC_GAAC_formulaFeatureDict()
-count2, names2 = countEnabledFeatureType(featureDict)
-print(f"OVPC_GAAC_formula 啟用的 feature type 數量: {count2}")
+# featureDict = buildOVPC_GAAC_formulaFeatureDict()
+# count2, names2 = countEnabledFeatureType(featureDict)
+# print(f"OVPC_GAAC_formula 啟用的 feature type 數量: {count2}")
 
-featureDict = buildSingleValueCombineFeatureDict()
-count3, names3 = countEnabledFeatureType(featureDict)
-print(f"singleValueCombine 啟用的 feature type 數量: {count3}")
+# featureDict = buildSingleValueCombineFeatureDict()
+# count3, names3 = countEnabledFeatureType(featureDict)
+# print(f"singleValueCombine 啟用的 feature type 數量: {count3}")
 
-# ======================================================================================================================
-# 只需要少量序列來辨識每個 feature type 產生的欄位名稱，不需要整個 DS_Train
-os.makedirs(featureStatPath, exist_ok=True)
-columnDiscoverySampleSize = 5
-columnDiscoverySampleDataDict = {
-    0: dict(list(DS_TrainNegSeqDict.items())[:columnDiscoverySampleSize]),
-    1: dict(list(DS_TrainPosSeqDict.items())[:columnDiscoverySampleSize]),
-    -1: None
-}
+# # ======================================================================================================================
+# # 只需要少量序列來辨識每個 feature type 產生的欄位名稱，不需要整個 DS_Train
+# os.makedirs(featureStatPath, exist_ok=True)
+# columnDiscoverySampleSize = 5
+# columnDiscoverySampleDataDict = {
+#     0: dict(list(DS_TrainNegSeqDict.items())[:columnDiscoverySampleSize]),
+#     1: dict(list(DS_TrainPosSeqDict.items())[:columnDiscoverySampleSize]),
+#     -1: None
+# }
 
-# mergedFeature.OVPC_GAAC_formula / mergedFeature.SingleValueCombine 這兩個 type，Package_Encode.py
-# 並不認得 'mergedFeature' 這個 key，直接對它們 encode 只會拿到 0 欄。
-# 這兩份清單是對照 devPackage/OVP.py、PackageiFeature.py、PackageModelAmp.py、PackagePFeature.py
-# 原始程式碼比對確認過的真實欄位名稱，直接寫死取代掉原本 encode 出來的空清單
-OVPC_GAAC_FORMULA_COLUMN_LIST = [
-    'OVPC_Aromatic', 'OVPC_Negative', 'OVPC_Positive', 'OVPC_Polar', 'OVPC_Hydrophobic',
-    'OVPC_Aliphatic', 'OVPC_Tiny', 'OVPC_Charged', 'OVPC_Small', 'OVPC_Imino_acid',
-    'GAAC_alphatic', 'GAAC_aromatic', 'GAAC_postivecharge', 'GAAC_negativecharge', 'GAAC_uncharge',
-    'formula_C', 'formula_H', 'formula_N', 'formula_O', 'formula_S'
-]
+# # mergedFeature.OVPC_GAAC_formula / mergedFeature.SingleValueCombine 這兩個 type，Package_Encode.py
+# # 並不認得 'mergedFeature' 這個 key，直接對它們 encode 只會拿到 0 欄。
+# # 這兩份清單是對照 devPackage/OVP.py、PackageiFeature.py、PackageModelAmp.py、PackagePFeature.py
+# # 原始程式碼比對確認過的真實欄位名稱，直接寫死取代掉原本 encode 出來的空清單
+# OVPC_GAAC_FORMULA_COLUMN_LIST = [
+#     'OVPC_Aromatic', 'OVPC_Negative', 'OVPC_Positive', 'OVPC_Polar', 'OVPC_Hydrophobic',
+#     'OVPC_Aliphatic', 'OVPC_Tiny', 'OVPC_Charged', 'OVPC_Small', 'OVPC_Imino_acid',
+#     'GAAC_alphatic', 'GAAC_aromatic', 'GAAC_postivecharge', 'GAAC_negativecharge', 'GAAC_uncharge',
+#     'formula_C', 'formula_H', 'formula_N', 'formula_O', 'formula_S'
+# ]
 
-# 順序對應 SINGLE_VALUE_FEATURE_NAME_LIST 的 27 個 key，各自實際的欄位名稱
-SINGLE_VALUE_COMBINE_COLUMN_LIST = [
-    'Length', 'Calculate_mw', 'Calculate_charge', 'Isoelectric_point',
-    'Instability_index', 'Aromaticity', 'Aliphatic_Index', 'Hydrophobic',
-    'AASI', 'Argos', 'Bulkiness', 'Charge_phys', 'Charge_acid',
-    'Flexibility', 'Gravy', 'Levitt_alpha', 'MSS', 'Polarity',
-    'Refractivity', 'TM_tend', 'Boman_Index', 'Eisenberg',
-    'Hopp_woods', 'Janin', 'Kytedoolittle', 'Shannon-Entropy', 'Charge_density'
-]
+# # 順序對應 SINGLE_VALUE_FEATURE_NAME_LIST 的 27 個 key，各自實際的欄位名稱
+# SINGLE_VALUE_COMBINE_COLUMN_LIST = [
+#     'Length', 'Calculate_mw', 'Calculate_charge', 'Isoelectric_point',
+#     'Instability_index', 'Aromaticity', 'Aliphatic_Index', 'Hydrophobic',
+#     'AASI', 'Argos', 'Bulkiness', 'Charge_phys', 'Charge_acid',
+#     'Flexibility', 'Gravy', 'Levitt_alpha', 'MSS', 'Polarity',
+#     'Refractivity', 'TM_tend', 'Boman_Index', 'Eisenberg',
+#     'Hopp_woods', 'Janin', 'Kytedoolittle', 'Shannon-Entropy', 'Charge_density'
+# ]
 
-mergedFeatureColumnMap = {
-    'mergedFeature.OVPC,GAAC,formula': OVPC_GAAC_FORMULA_COLUMN_LIST,
-    f'mergedFeature.{",".join(map(str, SINGLE_VALUE_FEATURE_NAME_LIST))}': SINGLE_VALUE_COMBINE_COLUMN_LIST,
-}
+# mergedFeatureColumnMap = {
+#     'mergedFeature.OVPC,GAAC,formula': OVPC_GAAC_FORMULA_COLUMN_LIST,
+#     f'mergedFeature.{",".join(map(str, SINGLE_VALUE_FEATURE_NAME_LIST))}': SINGLE_VALUE_COMBINE_COLUMN_LIST,
+# }
 
-# 建立 feature type 名稱 -> 欄位名稱清單 的對照表（合併後最終使用的 33 類 feature type），
-# 之後用來把被 FeatureStat 過濾掉的 feature 欄位對應回所屬 feature type
-featureTypeColumnMap = discoverFeatureTypeColumnMap(featureDict, columnDiscoverySampleDataDict)
-columnToFeatureType = {column: typeName for typeName, columnList in featureTypeColumnMap.items() for column in columnList}
+# # 建立 feature type 名稱 -> 欄位名稱清單 的對照表（合併後最終使用的 33 類 feature type），
+# # 之後用來把被 FeatureStat 過濾掉的 feature 欄位對應回所屬 feature type
+# featureTypeColumnMap = discoverFeatureTypeColumnMap(featureDict, columnDiscoverySampleDataDict)
+# columnToFeatureType = {column: typeName for typeName, columnList in featureTypeColumnMap.items() for column in columnList}
 
-# 33 類 feature type 明細表：Feature Type, feature size；只有 mergedFeature 底下這兩個合併後的 type，
-# 以及 feature size 剛好等於 1 的 type，才列出實際包含的欄位名稱（逗號分隔）
-featureTypeTablePath = featureStatPath + f'featureType_featureName_table_{dataName}.csv'
+# # 33 類 feature type 明細表：Feature Type, feature size；只有 mergedFeature 底下這兩個合併後的 type，
+# # 以及 feature size 剛好等於 1 的 type，才列出實際包含的欄位名稱（逗號分隔）
+# featureTypeTablePath = featureStatPath + f'featureType_featureName_table_{dataName}.csv'
 
-# 33 類 feature type 明細表（轉為橫向輸出）
-featureTypeTablePath = featureStatPath + f'featureType_featureName_table_{dataName}.csv'
+# # 33 類 feature type 明細表（轉為橫向輸出）
+# featureTypeTablePath = featureStatPath + f'featureType_featureName_table_{dataName}.csv'
 
-# 1. 取得原始的所有 Key
-all_keys = list(featureTypeColumnMap.keys())
+# # 1. 取得原始的所有 Key
+# all_keys = list(featureTypeColumnMap.keys())
 
-# 2. 拆分成「非 mergedFeature」與「mergedFeature」，再重組（merged 移到最後面）
-other_keys = [k for k in all_keys if not k.startswith('mergedFeature')]
-merged_keys = [k for k in all_keys if k.startswith('mergedFeature')]
-ordered_keys = other_keys + merged_keys
+# # 2. 拆分成「非 mergedFeature」與「mergedFeature」，再重組（merged 移到最後面）
+# other_keys = [k for k in all_keys if not k.startswith('mergedFeature')]
+# merged_keys = [k for k in all_keys if k.startswith('mergedFeature')]
+# ordered_keys = other_keys + merged_keys
 
-# 3. 依照新順序建立橫向 CSV
-featureTypeTablePath = featureStatPath + f'featureType_featureName_table_{dataName}.csv'
-featureTypesRow = ['Feature Type']
-featureSizesRow = ['feature size']
+# # 3. 依照新順序建立橫向 CSV
+# featureTypeTablePath = featureStatPath + f'featureType_featureName_table_{dataName}.csv'
+# featureTypesRow = ['Feature Type']
+# featureSizesRow = ['feature size']
 
-for typeName in ordered_keys:
-    columnList = featureTypeColumnMap[typeName]
-    if typeName in mergedFeatureColumnMap:
-        columnList = mergedFeatureColumnMap[typeName]
+# for typeName in ordered_keys:
+#     columnList = featureTypeColumnMap[typeName]
+#     if typeName in mergedFeatureColumnMap:
+#         columnList = mergedFeatureColumnMap[typeName]
     
-    # 移除 mergedFeature. 前綴
-    # displayName = typeName.replace('mergedFeature.', '')
-    displayName = typeName.split('.')[-1]
+#     # 移除 mergedFeature. 前綴
+#     # displayName = typeName.replace('mergedFeature.', '')
+#     displayName = typeName.split('.')[-1]
 
-    featureTypesRow.append(displayName)
-    featureSizesRow.append(len(columnList))
+#     featureTypesRow.append(displayName)
+#     featureSizesRow.append(len(columnList))
 
-# 4. 寫入 CSV
-with open(featureTypeTablePath, 'w', encoding='utf-8', newline='') as f:
-    writer = csv.writer(f)
-    writer.writerow(featureTypesRow)
-    writer.writerow(featureSizesRow)
+# # 4. 寫入 CSV
+# with open(featureTypeTablePath, 'w', encoding='utf-8', newline='') as f:
+#     writer = csv.writer(f)
+#     writer.writerow(featureTypesRow)
+#     writer.writerow(featureSizesRow)
 
-print(f"{len(featureTypeColumnMap)} 類 feature type 明細表已儲存到 {featureTypeTablePath}")
+# print(f"{len(featureTypeColumnMap)} 類 feature type 明細表已儲存到 {featureTypeTablePath}")
 
-# 儲存這三步驟的 feature type 數量統計到 csv 中
-os.makedirs(featureStatPath, exist_ok=True)
-featureTypeStatPath = featureStatPath + 'featureTypeStatistics.csv'
-with open(featureTypeStatPath, 'w', encoding='utf-8') as f:
-    f.write("featureType Process,count\n")
-    f.write(f"origin featureDict,{count}\n")
-    f.write(f"after merged OVPC GAAC formula,{count2}\n")
-    f.write(f"after merged all single value,{count3}\n")
-print(f"feature type 統計已儲存到{featureTypeStatPath}中")
+# # 儲存這三步驟的 feature type 數量統計到 csv 中
+# os.makedirs(featureStatPath, exist_ok=True)
+# featureTypeStatPath = featureStatPath + 'featureTypeStatistics.csv'
+# with open(featureTypeStatPath, 'w', encoding='utf-8') as f:
+#     f.write("featureType Process,count\n")
+#     f.write(f"origin featureDict,{count}\n")
+#     f.write(f"after merged OVPC GAAC formula,{count2}\n")
+#     f.write(f"after merged all single value,{count3}\n")
+# print(f"feature type 統計已儲存到{featureTypeStatPath}中")
 
-encodeObj = EncodeAllFeatures()
+# encodeObj = EncodeAllFeatures()
 
-encodeObj.dataEncodeSetup(saveFeatureDict=featureDict,  # normalization 前傳出來
-                          saveJsonPath=paramPath + f'{dataName}_featureTypeDict.json',  # 把 featureDict 存至 json 檔
-                          loadJsonPath=None,  # 讀取 featureDict 的 pkl 檔
-                          b_loadJson=False)  # True: 讀取 featureDict 的 pkl 檔 (loadJsonPath), False: 把 featureDict 存至 pkl 檔 (saveJsonPath)
+# encodeObj.dataEncodeSetup(saveFeatureDict=featureDict,  # normalization 前傳出來
+#                           saveJsonPath=paramPath + f'{dataName}_featureTypeDict.json',  # 把 featureDict 存至 json 檔
+#                           loadJsonPath=None,  # 讀取 featureDict 的 pkl 檔
+#                           b_loadJson=False)  # True: 讀取 featureDict 的 pkl 檔 (loadJsonPath), False: 把 featureDict 存至 pkl 檔 (saveJsonPath)
 
-# json 存的是「合併顯示」版本（給 Main_MLStkLv1.py 判斷有哪些 real enabled feature type 用），
-# 但實際 encode 要換回 originalFeatureDict，OVPC/GAAC/formula/27 個單一數值特徵才會真的產生欄位
-encodeObj.featureDict = originalFeatureDict
+# # json 存的是「合併顯示」版本（給 Main_MLStkLv1.py 判斷有哪些 real enabled feature type 用），
+# # 但實際 encode 要換回 originalFeatureDict，OVPC/GAAC/formula/27 個單一數值特徵才會真的產生欄位
+# encodeObj.featureDict = originalFeatureDict
 
-encodeDS_TrainDf = encodeObj.dataEncodeOutPut(dataDict = DS_TrainDataDict)
-encodeDS_IndpDf = encodeObj.dataEncodeOutPut(dataDict = DS_IndpDataDict)
-encodeDS_ValDf = encodeObj.dataEncodeOutPut(dataDict = DS_ValDataDict)
+# encodeDS_TrainDf = encodeObj.dataEncodeOutPut(dataDict = DS_TrainDataDict)
+# encodeDS_IndpDf = encodeObj.dataEncodeOutPut(dataDict = DS_IndpDataDict)
+# encodeDS_ValDf = encodeObj.dataEncodeOutPut(dataDict = DS_ValDataDict)
 
-# 儲存 encode 之後的檔案
-os.makedirs(featureStatPath, exist_ok=True)
-encodeDS_TrainCsvPath = featureStatPath + f'encode_{dataName}_DS_Train.csv'
-encodeDS_IndpCsvPath = featureStatPath + f'encode_{dataName}_DS_Indp.csv'
-encodeDS_ValCsvPath = featureStatPath + f'encode_{dataName}_DS_Val.csv'
-encodeDS_TrainDf.to_csv(encodeDS_TrainCsvPath)
-encodeDS_IndpDf.to_csv(encodeDS_IndpCsvPath)
-encodeDS_ValDf.to_csv(encodeDS_ValCsvPath)
-print(f"encode 後的資料已儲存到 {encodeDS_TrainCsvPath}、{encodeDS_IndpCsvPath} 與 {encodeDS_ValCsvPath}")
+# # 儲存 encode 之後的檔案
+# os.makedirs(featureStatPath, exist_ok=True)
+# encodeDS_TrainCsvPath = featureStatPath + f'encode_{dataName}_DS_Train.csv'
+# encodeDS_IndpCsvPath = featureStatPath + f'encode_{dataName}_DS_Indp.csv'
+# encodeDS_ValCsvPath = featureStatPath + f'encode_{dataName}_DS_Val.csv'
+# encodeDS_TrainDf.to_csv(encodeDS_TrainCsvPath)
+# encodeDS_IndpDf.to_csv(encodeDS_IndpCsvPath)
+# encodeDS_ValDf.to_csv(encodeDS_ValCsvPath)
+# print(f"encode 後的資料已儲存到 {encodeDS_TrainCsvPath}、{encodeDS_IndpCsvPath} 與 {encodeDS_ValCsvPath}")
 
-# 做normalization
-# ======================================================================================================================
-# normalization：standard 與 robust 都跑，分別存檔給 Main_MLStkLv1.py 讀取
-for normalizeMethod in normalizeMethodList:
-    nmlzScalerPath = paramPath + f'{dataName}_{normalizeMethod}Scaler.pkl'
+# # 做normalization
+# # ======================================================================================================================
+# # normalization：standard 與 robust 都跑，分別存檔給 Main_MLStkLv1.py 讀取
+# for normalizeMethod in normalizeMethodList:
+#     nmlzScalerPath = paramPath + f'{dataName}_{normalizeMethod}Scaler.pkl'
 
-    trainNmlzDf = encodeObj.dataNormalization(encodeTrainDf=encodeDS_TrainDf,
-                                              encodeIndpDf=None,  # train scaler存起來，indp 另外做
-                                              normalization=normalizeMethod,
-                                              saveNmlzScalerPklPath=nmlzScalerPath,
-                                              loadNmlzScalerPklPath=None,
-                                              b_loadPkl=False)
-    indpNmlzDf = encodeObj.dataNormalization(encodeTrainDf=None,
-                                             encodeIndpDf=encodeDS_IndpDf,
-                                             normalization=normalizeMethod,
-                                             saveNmlzScalerPklPath=None,
-                                             loadNmlzScalerPklPath=nmlzScalerPath,
-                                             b_loadPkl=True)  # indp test set 永遠使用 training set 存好的 NmlzScaler.pkl 檔
-    valNmlzDf = encodeObj.dataNormalization(encodeTrainDf=None,
-                                            encodeIndpDf=encodeDS_ValDf,
-                                            normalization=normalizeMethod,
-                                            saveNmlzScalerPklPath=None,
-                                            loadNmlzScalerPklPath=nmlzScalerPath,
-                                            b_loadPkl=True)  # DS_Val 同樣永遠使用 training set 存好的 NmlzScaler.pkl 檔
+#     trainNmlzDf = encodeObj.dataNormalization(encodeTrainDf=encodeDS_TrainDf,
+#                                               encodeIndpDf=None,  # train scaler存起來，indp 另外做
+#                                               normalization=normalizeMethod,
+#                                               saveNmlzScalerPklPath=nmlzScalerPath,
+#                                               loadNmlzScalerPklPath=None,
+#                                               b_loadPkl=False)
+#     indpNmlzDf = encodeObj.dataNormalization(encodeTrainDf=None,
+#                                              encodeIndpDf=encodeDS_IndpDf,
+#                                              normalization=normalizeMethod,
+#                                              saveNmlzScalerPklPath=None,
+#                                              loadNmlzScalerPklPath=nmlzScalerPath,
+#                                              b_loadPkl=True)  # indp test set 永遠使用 training set 存好的 NmlzScaler.pkl 檔
+#     valNmlzDf = encodeObj.dataNormalization(encodeTrainDf=None,
+#                                             encodeIndpDf=encodeDS_ValDf,
+#                                             normalization=normalizeMethod,
+#                                             saveNmlzScalerPklPath=None,
+#                                             loadNmlzScalerPklPath=nmlzScalerPath,
+#                                             b_loadPkl=True)  # DS_Val 同樣永遠使用 training set 存好的 NmlzScaler.pkl 檔
 
-    trainNmlzCsvPath = featureStatPath + f'train_{dataName}_{normalizeMethod}.csv'
-    indpNmlzCsvPath = featureStatPath + f'indp_{dataName}_{normalizeMethod}.csv'
-    valNmlzCsvPath = featureStatPath + f'val_{dataName}_{normalizeMethod}.csv'
-    trainNmlzDf.to_csv(trainNmlzCsvPath)
-    indpNmlzDf.to_csv(indpNmlzCsvPath)
-    valNmlzDf.to_csv(valNmlzCsvPath)
-    print(f"[{normalizeMethod}] normalize 後的資料已儲存到 {trainNmlzCsvPath}、{indpNmlzCsvPath} 與 {valNmlzCsvPath}")
+#     trainNmlzCsvPath = featureStatPath + f'train_{dataName}_{normalizeMethod}.csv'
+#     indpNmlzCsvPath = featureStatPath + f'indp_{dataName}_{normalizeMethod}.csv'
+#     valNmlzCsvPath = featureStatPath + f'val_{dataName}_{normalizeMethod}.csv'
+#     trainNmlzDf.to_csv(trainNmlzCsvPath)
+#     indpNmlzDf.to_csv(indpNmlzCsvPath)
+#     valNmlzDf.to_csv(valNmlzCsvPath)
+#     print(f"[{normalizeMethod}] normalize 後的資料已儲存到 {trainNmlzCsvPath}、{indpNmlzCsvPath} 與 {valNmlzCsvPath}")
 
-    # ==================================================================================================================
-    # Feature Stat 分析：找出數值過度集中（top1percent 過高）的 feature 並過濾掉，MotifBitVec 系列 feature 受保護不被過濾
-    featureStatObj = FeatureStat(dataDf=trainNmlzDf)
-    featureStatObj.sdAnalysis(saveFigPath=featureStatPath + f"sd_analysis_{dataName}_{normalizeMethod}.jpg")
-    featureAnalysisXlsxPath = featureStatPath + f"featureAnalysis_{dataName}_{normalizeMethod}.xlsx"
-    featureStatObj.featureValuePct_analysis(saveFinalExcel=featureAnalysisXlsxPath)
+#     # ==================================================================================================================
+#     # Feature Stat 分析：找出數值過度集中（top1percent 過高）的 feature 並過濾掉，MotifBitVec 系列 feature 受保護不被過濾
+#     featureStatObj = FeatureStat(dataDf=trainNmlzDf)
+#     featureStatObj.sdAnalysis(saveFigPath=featureStatPath + f"sd_analysis_{dataName}_{normalizeMethod}.jpg")
+#     featureAnalysisXlsxPath = featureStatPath + f"featureAnalysis_{dataName}_{normalizeMethod}.xlsx"
+#     featureStatObj.featureValuePct_analysis(saveFinalExcel=featureAnalysisXlsxPath)
 
-    filteredTrainNmlzDf, removeList = featureStatObj.processData(xlsxPath=featureAnalysisXlsxPath,
-                                                                  columnName='top1percent', number='+0.98',
-                                                                  protectFeatSubstringList=['MotifBitVec'])
-    featureStatObj.processDataLog(logPath=mlDataPath + f'{dataName}_{normalizeMethod}_')
+#     filteredTrainNmlzDf, removeList = featureStatObj.processData(xlsxPath=featureAnalysisXlsxPath,
+#                                                                   columnName='top1percent', number='+0.98',
+#                                                                   protectFeatSubstringList=['MotifBitVec'])
+#     featureStatObj.processDataLog(logPath=mlDataPath + f'{dataName}_{normalizeMethod}_')
 
-    filterTrainNmlzPath = featureStatPath + f'filtered_train_{dataName}_{normalizeMethod}.csv'  # 過濾完 feature 後的 nmlz 訓練資料
-    filterIndpNmlzPath = featureStatPath + f'filtered_indp_{dataName}_{normalizeMethod}.csv'  # DS_Indp 同步 drop 掉跟訓練集一樣的 feature 後的資料
-    filterValNmlzPath = featureStatPath + f'filtered_val_{dataName}_{normalizeMethod}.csv'  # DS_Val 同步 drop 掉跟訓練集一樣的 feature 後的資料
-    removeFeatureListPath = featureStatPath + f'remove_feature_list_{dataName}_{normalizeMethod}.json'  # 被過濾掉的 feature 名稱清單
-    removeFeatureTypeListPath = featureStatPath + f'remove_featureType_list_{dataName}_{normalizeMethod}.json'  # 被過濾掉的 feature，依所屬 feature type 分組的清單
-    filteredTrainNmlzDf.to_csv(filterTrainNmlzPath)
+#     filterTrainNmlzPath = featureStatPath + f'filtered_train_{dataName}_{normalizeMethod}.csv'  # 過濾完 feature 後的 nmlz 訓練資料
+#     filterIndpNmlzPath = featureStatPath + f'filtered_indp_{dataName}_{normalizeMethod}.csv'  # DS_Indp 同步 drop 掉跟訓練集一樣的 feature 後的資料
+#     filterValNmlzPath = featureStatPath + f'filtered_val_{dataName}_{normalizeMethod}.csv'  # DS_Val 同步 drop 掉跟訓練集一樣的 feature 後的資料
+#     removeFeatureListPath = featureStatPath + f'remove_feature_list_{dataName}_{normalizeMethod}.json'  # 被過濾掉的 feature 名稱清單
+#     removeFeatureTypeListPath = featureStatPath + f'remove_featureType_list_{dataName}_{normalizeMethod}.json'  # 被過濾掉的 feature，依所屬 feature type 分組的清單
+#     filteredTrainNmlzDf.to_csv(filterTrainNmlzPath)
 
-    filteredIndpNmlzDf = indpNmlzDf.drop(columns=removeList)  # DS_Indp 用訓練集算出的 removeList 同步過濾，欄位才會跟訓練集一致
-    filteredIndpNmlzDf.to_csv(filterIndpNmlzPath)
+#     filteredIndpNmlzDf = indpNmlzDf.drop(columns=removeList)  # DS_Indp 用訓練集算出的 removeList 同步過濾，欄位才會跟訓練集一致
+#     filteredIndpNmlzDf.to_csv(filterIndpNmlzPath)
 
-    filteredValNmlzDf = valNmlzDf.drop(columns=removeList)  # DS_Val 用訓練集算出的 removeList 同步過濾，欄位才會跟訓練集一致
-    filteredValNmlzDf.to_csv(filterValNmlzPath)
+#     filteredValNmlzDf = valNmlzDf.drop(columns=removeList)  # DS_Val 用訓練集算出的 removeList 同步過濾，欄位才會跟訓練集一致
+#     filteredValNmlzDf.to_csv(filterValNmlzPath)
 
-    with open(removeFeatureListPath, 'w', encoding='utf-8') as f:
-        json.dump(removeList, f, ensure_ascii=False, indent=2)
+#     with open(removeFeatureListPath, 'w', encoding='utf-8') as f:
+#         json.dump(removeList, f, ensure_ascii=False, indent=2)
 
-    removeFeatureTypeDict = {}
-    for column in removeList:
-        typeName = columnToFeatureType.get(column, 'unknown')
-        removeFeatureTypeDict.setdefault(typeName, []).append(column)
-    with open(removeFeatureTypeListPath, 'w', encoding='utf-8') as f:
-        json.dump(removeFeatureTypeDict, f, ensure_ascii=False, indent=2)
+#     removeFeatureTypeDict = {}
+#     for column in removeList:
+#         typeName = columnToFeatureType.get(column, 'unknown')
+#         removeFeatureTypeDict.setdefault(typeName, []).append(column)
+#     with open(removeFeatureTypeListPath, 'w', encoding='utf-8') as f:
+#         json.dump(removeFeatureTypeDict, f, ensure_ascii=False, indent=2)
 
-    featureTypeFilterSummaryPath = featureStatPath + f'featureType_filterSummary_{dataName}_{normalizeMethod}.xlsx'
-    saveFeatureTypeFilterSummary(enable=b_saveFeatureTypeFilterSummary,
-                                 orderedKeys=ordered_keys,
-                                 featureTypeColumnMap=featureTypeColumnMap,
-                                 mergedFeatureColumnMap=mergedFeatureColumnMap,
-                                 removeList=removeList,
-                                 savePath=featureTypeFilterSummaryPath)
+#     featureTypeFilterSummaryPath = featureStatPath + f'featureType_filterSummary_{dataName}_{normalizeMethod}.xlsx'
+#     saveFeatureTypeFilterSummary(enable=b_saveFeatureTypeFilterSummary,
+#                                  orderedKeys=ordered_keys,
+#                                  featureTypeColumnMap=featureTypeColumnMap,
+#                                  mergedFeatureColumnMap=mergedFeatureColumnMap,
+#                                  removeList=removeList,
+#                                  savePath=featureTypeFilterSummaryPath)
 
-    print(f"[{normalizeMethod}] Feature Stat 過濾完成，共過濾掉 {len(removeList)} 個 feature（分屬 {len(removeFeatureTypeDict)} 個 feature type），"
-          f"剩餘 {filteredTrainNmlzDf.shape[1]} 欄，結果已儲存到 {filterTrainNmlzPath}、{filterIndpNmlzPath}、{filterValNmlzPath}、"
-          f"{removeFeatureListPath} 與 {removeFeatureTypeListPath}")
+#     print(f"[{normalizeMethod}] Feature Stat 過濾完成，共過濾掉 {len(removeList)} 個 feature（分屬 {len(removeFeatureTypeDict)} 個 feature type），"
+#           f"剩餘 {filteredTrainNmlzDf.shape[1]} 欄，結果已儲存到 {filterTrainNmlzPath}、{filterIndpNmlzPath}、{filterValNmlzPath}、"
+#           f"{removeFeatureListPath} 與 {removeFeatureTypeListPath}")
