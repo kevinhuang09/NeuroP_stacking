@@ -69,14 +69,16 @@ for normalizeMethod in normalizeMethodList:
     filteredSplitDir = featureStatPath + f'featureType_csv_{dataName}_{normalizeMethod}_filtered/'
     trainSplitDir = filteredSplitDir + 'DS_Train/'
     valSplitDir = filteredSplitDir + 'DS_Val/'
+    indpSplitDir = filteredSplitDir + 'DS_Indp/'
 
-    # 檔名（去掉 .csv）就是 feature type 名稱，train / val 兩邊都要有才拿來訓練
+    # 檔名（去掉 .csv）就是 feature type 名稱，train / val / indp 三邊都要有才拿來訓練＋predict
     trainTypeFileSet = {f for f in os.listdir(trainSplitDir) if f.endswith('.csv')}
     valTypeFileSet = {f for f in os.listdir(valSplitDir) if f.endswith('.csv')}
-    typeFileNameList = sorted(trainTypeFileSet & valTypeFileSet)
-    missingInVal = trainTypeFileSet - valTypeFileSet
-    if missingInVal:
-        print(f"[提醒] {normalizeMethod}：{len(missingInVal)} 個 feature type 只有 DS_Train 有檔案、DS_Val 沒有，已跳過: {sorted(missingInVal)}")
+    indpTypeFileSet = {f for f in os.listdir(indpSplitDir) if f.endswith('.csv')}
+    typeFileNameList = sorted(trainTypeFileSet & valTypeFileSet & indpTypeFileSet)
+    missingSet = (trainTypeFileSet | valTypeFileSet | indpTypeFileSet) - (trainTypeFileSet & valTypeFileSet & indpTypeFileSet)
+    if missingSet:
+        print(f"[提醒] {normalizeMethod}：{len(missingSet)} 個 feature type 沒有同時存在於 DS_Train/DS_Val/DS_Indp，已跳過: {sorted(missingSet)}")
     print(f"[{normalizeMethod}] 讀到 {len(typeFileNameList)} 個 feature type 的過濾後資料：{trainSplitDir}")
 
     # 測試用：只取 testFeatureTypeCount 個 feature type，兩個 mergedFeature 合併項目一定要包含在內
@@ -85,10 +87,14 @@ for normalizeMethod in normalizeMethodList:
     typeFileNameList = (mergedTypeFileNameList + otherTypeFileNameList)[:testFeatureTypeCount]
     print(f"[test][{normalizeMethod}] 只使用 {len(typeFileNameList)} 個 feature type 進行測試: {typeFileNameList}")
 
-    # 用任一份 DS_Val 檔案先確定 index/y，組出 Meta-Feature-Matrix 骨架
+    # 用任一份 DS_Val / DS_Indp 檔案先確定 index/y，組出 Meta-Feature-Matrix 骨架
     firstValDf = pd.read_csv(valSplitDir + typeFileNameList[0], index_col=[0])
     metaFeatureMatrix = pd.DataFrame(index=firstValDf.index)
     metaFeatureMatrix['y'] = firstValDf['y']
+
+    firstIndpDf = pd.read_csv(indpSplitDir + typeFileNameList[0], index_col=[0])
+    indpMetaFeatureMatrix = pd.DataFrame(index=firstIndpDf.index)
+    indpMetaFeatureMatrix['y'] = firstIndpDf['y']
 
     for typeFileName in typeFileNameList:  # 一次挑一種 Feature Type
         typeName = typeFileName[:-len('.csv')]
@@ -96,7 +102,9 @@ for normalizeMethod in normalizeMethodList:
         subTrainDf = pd.read_csv(trainSplitDir + typeFileName, index_col=[0])
         subValDf = pd.read_csv(valSplitDir + typeFileName, index_col=[0])
         subVal_X = subValDf.drop(columns=['y'])  # DS_Val 同一組欄位，只留 X 給 predict 用
-        print(f"[{normalizeMethod}] {typeName}: train={subTrainDf.shape}, val_X={subVal_X.shape}")
+        subIndpDf = pd.read_csv(indpSplitDir + typeFileName, index_col=[0])
+        subIndp_X = subIndpDf.drop(columns=['y'])  # DS_Indp 同一組欄位，只留 X 給 predict 用
+        print(f"[{normalizeMethod}] {typeName}: train={subTrainDf.shape}, val_X={subVal_X.shape}, indp_X={subIndp_X.shape}")
 
         # 每個 normalizeMethod + featureType 的 model 各自存在獨立資料夾，避免互相覆蓋
         comboSavePath = os.path.join(tuneModelPath, normalizeMethod, typeName.replace('.', '_'))
@@ -127,11 +135,15 @@ for normalizeMethod in normalizeMethodList:
                     predictModelList = pycObj.doLoadModel(comboSavePath, fileNameList=[modelName],
                                                            b_isFinalizedModel=True)
 
-                # 用這個 model 對 DS_Val 做 predict，寫進 Meta-Feature-Matrix（機率表）
+                # 用這個 model 對 DS_Val / DS_Indp 做 predict，分別寫進各自的 Meta-Feature-Matrix（機率表）
                 predObj = Predict(dataX=subVal_X, modelList=predictModelList)
                 _, probVectorList = predObj.doPredict()
                 metaFeatureMatrix[f'{typeName}.{modelName}'] = probVectorList[0]
-                print(f"[predict] {normalizeMethod} + {typeName} + {modelName} 已寫入 Meta-Feature-Matrix")
+
+                indpPredObj = Predict(dataX=subIndp_X, modelList=predictModelList)
+                _, indpProbVectorList = indpPredObj.doPredict()
+                indpMetaFeatureMatrix[f'{typeName}.{modelName}'] = indpProbVectorList[0]
+                print(f"[predict] {normalizeMethod} + {typeName} + {modelName} 已寫入 Meta-Feature-Matrix（val + indp）")
             except Exception as e:
                 actionName = '訓練' if tune_model else '讀取/predict'
                 print(f"[跳過] {normalizeMethod} + {typeName} + {modelName} {actionName}失敗: {e}")
@@ -142,6 +154,10 @@ for normalizeMethod in normalizeMethodList:
     metaFeatureMatrixPath = mlScorePath + f'Meta-Feature-Matrix_{dataName}_test_{normalizeMethod}.csv'
     metaFeatureMatrix.to_csv(metaFeatureMatrixPath)
     print(f"[{normalizeMethod}] DS_Val 機率表 (Meta-Feature-Matrix) 已儲存到 {metaFeatureMatrixPath}")
+
+    indpMetaFeatureMatrixPath = mlScorePath + f'Meta-Feature-Matrix_{dataName}_test_indp_{normalizeMethod}.csv'
+    indpMetaFeatureMatrix.to_csv(indpMetaFeatureMatrixPath)
+    print(f"[{normalizeMethod}] DS_Indp 機率表 (Meta-Feature-Matrix) 已儲存到 {indpMetaFeatureMatrixPath}")
 
 if tune_model:
     resultDf = pd.DataFrame(resultRows)
