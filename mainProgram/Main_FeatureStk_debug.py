@@ -29,6 +29,7 @@ def setupParentPath(enableVscodeParentPath):
 setupParentPath(useVscodeParentPath)
 
 import copy
+import csv
 import json
 from userPackage.Package_Encode import EncodeAllFeatures
 from userPackage.FeatureStat import FeatureStat
@@ -385,12 +386,42 @@ featureDict = buildSingleValueCombineFeatureDict()
 count3, names3 = countEnabledFeatureType(featureDict)
 print(f"singleValueCombine 啟用的 feature type 數量: {count3}")
 
+# 儲存這三步驟的 feature type 數量統計到 csv 中
+featureTypeStatPath = featureStatPath + 'featureTypeStatistics.csv'
+with open(featureTypeStatPath, 'w', encoding='utf-8') as f:
+    f.write("featureType Process,count\n")
+    f.write(f"origin featureDict,{count}\n")
+    f.write(f"after merged OVPC GAAC formula,{count2}\n")
+    f.write(f"after merged all single value,{count3}\n")
+print(f"feature type 統計已儲存到{featureTypeStatPath}中")
+
 # 把獨立版本的欄位對照表，組成合併後的版本，再存檔
 os.makedirs(featureStatPath, exist_ok=True)
 mergedFeatureTypeColumnMap = buildMergedFeatureTypeColumnMap(featureTypeColumnMap)
 featureTypeReferenceTablePath = featureStatPath + f'featureType_reference_table_{dataName}.xlsx'
 saveFeatureTypeReferenceTable(featureTypeColumnMap=mergedFeatureTypeColumnMap,
                               savePath=featureTypeReferenceTablePath)
+
+# 橫向的 feature type 明細表：第一列為 Feature Type 名稱，第二列為 feature size，非 mergedFeature 排前面、mergedFeature 排最後
+featureTypeTablePath = featureStatPath + f'featureType_featureName_table_{dataName}.csv'
+allTypeKeys = list(mergedFeatureTypeColumnMap.keys())
+otherTypeKeys = [k for k in allTypeKeys if not k.startswith('mergedFeature')]
+mergedTypeKeys = [k for k in allTypeKeys if k.startswith('mergedFeature')]
+orderedTypeKeys = otherTypeKeys + mergedTypeKeys
+
+featureTypesRow = ['Feature Type']
+featureSizesRow = ['feature size']
+for typeName in orderedTypeKeys:
+    columnList = mergedFeatureTypeColumnMap[typeName]
+    displayName = typeName.split('.', 1)[-1]
+    featureTypesRow.append(displayName)
+    featureSizesRow.append(len(columnList))
+
+with open(featureTypeTablePath, 'w', encoding='utf-8', newline='') as f:
+    writer = csv.writer(f)
+    writer.writerow(featureTypesRow)
+    writer.writerow(featureSizesRow)
+print(f"{len(mergedFeatureTypeColumnMap)} 類 feature type 明細表已儲存到 {featureTypeTablePath}")
 
 # ======================================================================================================================
 # 依 feature type 拆分表格用的工具函式（encode 後、normalize 後都會用到）
@@ -534,9 +565,11 @@ for normalizeMethod in normalizeMethodList:
           f"剩餘 {filteredTrainNmlzDf.shape[1]} 欄，結果已儲存到 {filterTrainNmlzPath}、{filterIndpNmlzPath}、{filterValNmlzPath}、"
           f"{removeFeatureListPath} 與 {removeFeatureTypeListPath}")
 
-    # feature filter 完成後，把過濾後剩餘欄位數加回 feature type 對照表（新增 Feature Number After Filtering 欄位）
+    # feature filter 完成後，把過濾後剩餘欄位數輸出成獨立的每個 normalizeMethod 一份對照表（新增 Feature Number
+    # After Filtering 欄位），檔名依 normalizeMethod 區分，避免 normalizeMethodList 有多個方法時互相覆蓋
+    featureTypeFilterSummaryPath = featureStatPath + f'featureType_reference_table_{dataName}_{normalizeMethod}.xlsx'
     saveFeatureTypeReferenceTable(featureTypeColumnMap=mergedFeatureTypeColumnMap,
-                                  savePath=featureTypeReferenceTablePath,
+                                  savePath=featureTypeFilterSummaryPath,
                                   removeList=removeList)
 
     # 依 feature type 拆分過濾後的大表格，每個 feature type 各自存成一個 csv，train/indp/val 各自一個資料夾
