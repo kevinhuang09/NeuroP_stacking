@@ -169,24 +169,34 @@ def discoverFeatureTypeColumnMap(featureDict, sampleDataDict):
         featureTypeColumnMap[typeName] = columnList
 
     return featureTypeColumnMap
-def saveFeatureTypeReferenceTable(featureTypeColumnMap, savePath):
+def saveFeatureTypeReferenceTable(featureTypeColumnMap, savePath, removeList=None):
     """
     依 discoverFeatureTypeColumnMap 動態抓出的欄位清單，統計每個 feature type 實際的 feature size，
-    輸出成 xlsx：欄位為 Type, Feature Type, Feature Size。
+    輸出成 xlsx：欄位為 Type, Feature Type, Feature Size[, Feature Number After Filtering]。
     先依 Type 排序讓同樣的 type 集中在同一區塊（區塊內再依 feature size 由大到小排序），
     再把 Type 欄位中連續相同的值合併儲存格並置中。
+    removeList 不為 None 時（feature filter 執行完之後），多輸出一欄 Feature Number After Filtering，
+    統計每個 feature type 被過濾後還剩下多少欄位（未被 removeList 移除的欄位數）。
     """
+    removeSet = set(removeList) if removeList is not None else None
+
     rows = []
     for typeName, columnList in featureTypeColumnMap.items():
         groupName, displayName = typeName.split('.', 1)
-        rows.append([groupName, displayName, len(columnList)])
+        row = [groupName, displayName, len(columnList)]
+        if removeSet is not None:
+            row.append(sum(1 for column in columnList if column not in removeSet))
+        rows.append(row)
 
     # 依 Type 排序讓同樣的 type 集中在同一區，區內再依 feature size 由大到小排序
     rows.sort(key=lambda r: (r[0], -r[2]))
 
     wb = Workbook()
     ws = wb.active
-    ws.append(['Type', 'Feature Type', 'Feature Size'])
+    header = ['Type', 'Feature Type', 'Feature Size']
+    if removeSet is not None:
+        header.append('Feature Number After Filtering')
+    ws.append(header)
     for row in rows:
         ws.append(row)
 
@@ -523,6 +533,11 @@ for normalizeMethod in normalizeMethodList:
     print(f"[{normalizeMethod}] Feature Stat 過濾完成，共過濾掉 {len(removeList)} 個 feature（分屬 {len(removeFeatureTypeDict)} 個 feature type），"
           f"剩餘 {filteredTrainNmlzDf.shape[1]} 欄，結果已儲存到 {filterTrainNmlzPath}、{filterIndpNmlzPath}、{filterValNmlzPath}、"
           f"{removeFeatureListPath} 與 {removeFeatureTypeListPath}")
+
+    # feature filter 完成後，把過濾後剩餘欄位數加回 feature type 對照表（新增 Feature Number After Filtering 欄位）
+    saveFeatureTypeReferenceTable(featureTypeColumnMap=mergedFeatureTypeColumnMap,
+                                  savePath=featureTypeReferenceTablePath,
+                                  removeList=removeList)
 
     # 依 feature type 拆分過濾後的大表格，每個 feature type 各自存成一個 csv，train/indp/val 各自一個資料夾
     filteredFeatureTypeSplitBaseDir = featureStatPath + f'featureType_csv_{dataName}_{normalizeMethod}_filtered/'
