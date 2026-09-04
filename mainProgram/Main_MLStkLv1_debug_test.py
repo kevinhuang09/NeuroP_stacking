@@ -6,7 +6,7 @@ tune_model = True  # True: 針對每個 normalizeMethod × feature type × model
 # ======================================================================================================================
 # 測試用開關：跟 Main_MLStkLv1_debug.py 功能完全相同，只差在把 feature type 與 model 數量都縮小方便快速測試
 testFeatureTypeCount = 5  # 只取 5 個 feature type（兩個 mergedFeature 合併項目一定會被包含在內）
-testModelCount = 5  # 只取前 5 個 model
+testModelCount = 5  # 只取 5 個 model（lightgbm、xgboost 一定會被包含在內）
 # ======================================================================================================================
 
 import matplotlib
@@ -32,142 +32,27 @@ def setupParentPath(enableVscodeParentPath):
 
 setupParentPath(useVscodeParentPath)
 
-import json
-import copy
 import pandas as pd
-from userPackage.Package_Encode import EncodeAllFeatures
 from MLProcess.PycaretWrapper import PycaretWrapper
 from MLProcess.Predict import Predict
 
 # ======================================================================================================================
-# 基本路徑（跟 Main_FeatureStk_debug.py 共用，讀取它存出來的 featureTypeDict.json 與 filtered 後的資料）
-paramPath = "../data/param/"  # 內含檔案: {dataName}_featureTypeDict.json
-featureStatPath = '../data/featureStat/'  # 內含 Main_FeatureStk_debug.py 存的 filtered_train/val_{dataName}_{normalizeMethod}.csv
+# 基本路徑：直接接 Main_FeatureStk_debug.py 產生的結果，不重新推導 feature type/欄位
+# Main_FeatureStk_debug.py 對每個 normalizeMethod 都會把 feature filter 完的資料依 feature type 拆成
+# featureStatPath/featureType_csv_{dataName}_{normalizeMethod}_filtered/DS_Train(或 DS_Val)/{typeName}.csv，
+# 檔名就是 feature type 名稱（mergedFeature 底下的合併項目已經是簡短名稱，如 mergedFeature.SingleValueCombine），
+# 這裡直接列出資料夾裡的檔案逐一讀取、訓練，不用重新讀 featureTypeDict.json 或重算欄位對照表。
+featureStatPath = '../data/featureStat/'
 mlScorePath = "../data/mlScore/"  # 內含 ml model 預測完並算好分的檔案（測試結果會加上 _test 後綴，跟正式結果分開）
 tuneModelPath = "../data/tuneModel_test/"  # 測試專用資料夾，避免覆蓋 Main_MLStkLv1_debug.py 存的正式 finalized model
 dataName = 'NeuroP_1'
 
 # Main_FeatureStk_debug.py 目前 normalizeMethodList 只有 'standard'，這裡要跟它保持一致，
-# 否則會去讀一份 Main_FeatureStk_debug.py 根本沒產生的 filtered_train/val_{dataName}_{normalizeMethod}.csv
+# 否則會去讀一個 Main_FeatureStk_debug.py 根本沒產生的 featureType_csv_{dataName}_{normalizeMethod}_filtered 資料夾
 normalizeMethodList = ['standard']
 
-# ======================================================================================================================
-# 讀取 Main_FeatureStk_debug.py 存的 featureTypeDict.json（實際 encode 時用的完整 featureDict，含各參數）
-featureTypeDictJsonPath = paramPath + f'{dataName}_featureTypeDict.json'
-with open(featureTypeDictJsonPath, 'r', encoding='utf-8') as f:
-    usedFeatureDict = json.load(f)
-
-def buildAllOffFeatureDict(baseDict):
-    """把 iFeature/pFeature/ampFeature/ovpFeature/mergedFeature/motifBitVecFeature/centerGDPFeature 全部開關關閉，保留其餘參數結構"""
-    offDict = copy.deepcopy(baseDict)
-    for groupName in ['iFeature', 'pFeature', 'ampFeature', 'ovpFeature', 'mergedFeature']:
-        if groupName not in offDict:
-            continue
-        for key, value in offDict[groupName].items():
-            if isinstance(value, list):
-                value[0] = False
-            else:
-                offDict[groupName][key] = False
-    offDict['centerGDPFeature']['Usage'] = False
-    return offDict
-
-def getRealEnabledFeatureTypeList(featureDict):
-    """列出真正會產生欄位的 feature type（(groupName, key) tuple 清單）"""
-    enabledList = []
-    for groupName in ['iFeature', 'pFeature', 'ampFeature', 'ovpFeature', 'mergedFeature']:
-        if groupName not in featureDict:
-            continue
-        for key, value in featureDict[groupName].items():
-            if value is True or (isinstance(value, list) and value[0] is True):
-                enabledList.append((groupName, key))
-    if featureDict['centerGDPFeature'].get('Usage') is True:
-        enabledList.append(('centerGDPFeature', 'Usage'))
-    return enabledList
-
-# mergedFeature.OVPC,GAAC,formula / mergedFeature.{27 個單一數值特徵} 這兩個 type，Package_Encode.py
-# 並不認得 'mergedFeature' 這個 key，直接對它們 encode 只會拿到 0 欄，所以跟 Main_FeatureStk_debug.py 一樣，
-# 用寫死的欄位名稱清單取代掉原本 encode 出來的空清單
-SINGLE_VALUE_FEATURE_NAME_LIST = [
-    "length", "calculate_mw", "calculate_charge", "isoelectric_point",
-    "instability_index", "aromaticity", "aliphatic_index", "hydrophobic",
-    "aasi", "argos", "bulkiness", "charge_phys", "charge_acid",
-    "flexibility", "gravy", "levitt_alpha", "mss", "polarity",
-    "refractivity", "tm_tend", "boman_index", "eisenberg",
-    "hopp_woods", "janin", "kytedoolittle", "SE", "charge_density"
-]
-
-OVPC_GAAC_FORMULA_COLUMN_LIST = [
-    'OVPC_Aromatic', 'OVPC_Negative', 'OVPC_Positive', 'OVPC_Polar', 'OVPC_Hydrophobic',
-    'OVPC_Aliphatic', 'OVPC_Tiny', 'OVPC_Charged', 'OVPC_Small', 'OVPC_Imino_acid',
-    'GAAC_alphatic', 'GAAC_aromatic', 'GAAC_postivecharge', 'GAAC_negativecharge', 'GAAC_uncharge',
-    'formula_C', 'formula_H', 'formula_N', 'formula_O', 'formula_S'
-]
-
-SINGLE_VALUE_COMBINE_COLUMN_LIST = [
-    'Length', 'Calculate_mw', 'Calculate_charge', 'Isoelectric_point',
-    'Instability_index', 'Aromaticity', 'Aliphatic_Index', 'Hydrophobic',
-    'AASI', 'Argos', 'Bulkiness', 'Charge_phys', 'Charge_acid',
-    'Flexibility', 'Gravy', 'Levitt_alpha', 'MSS', 'Polarity',
-    'Refractivity', 'TM_tend', 'Boman_Index', 'Eisenberg',
-    'Hopp_woods', 'Janin', 'Kytedoolittle', 'Shannon-Entropy', 'Charge_density'
-]
-
-mergedFeatureColumnMap = {
-    'mergedFeature.OVPC,GAAC,formula': OVPC_GAAC_FORMULA_COLUMN_LIST,
-    f'mergedFeature.{",".join(map(str, SINGLE_VALUE_FEATURE_NAME_LIST))}': SINGLE_VALUE_COMBINE_COLUMN_LIST,
-}
-
-def discoverFeatureTypeColumnMap(featureDict, sampleDataDict):
-    """
-    對每個真正開啟的 feature type，各自單獨開啟、encode 一次（只為了拿欄位名稱，不重算真正的特徵值），
-    建立 feature type 名稱 -> 欄位名稱清單 的對照表，之後直接從已經 encode 好的完整 DataFrame 切欄位。
-    """
-    realEnabledList = getRealEnabledFeatureTypeList(featureDict)
-    allOffTemplate = buildAllOffFeatureDict(featureDict)
-
-    featureTypeColumnMap = {}
-    for groupName, key in realEnabledList:
-        singleFeatureDict = copy.deepcopy(allOffTemplate)
-        if isinstance(singleFeatureDict[groupName][key], list):
-            singleFeatureDict[groupName][key][0] = True
-        else:
-            singleFeatureDict[groupName][key] = True
-
-        typeName = f'{groupName}.{key}'
-        if typeName in mergedFeatureColumnMap:
-            columnList = mergedFeatureColumnMap[typeName]
-        else:
-            singleEncodeObj = EncodeAllFeatures()
-            singleEncodeObj.featureDict = singleFeatureDict
-            singleDf = singleEncodeObj.dataEncodeOutPut(dataDict=sampleDataDict)
-            columnList = [c for c in singleDf.columns if c != 'y']
-
-        featureTypeColumnMap[typeName] = columnList
-        print(f"feature type {typeName}: {len(columnList)} 欄")
-
-    return featureTypeColumnMap
-
-
-# 只需要少量序列來辨識每個 feature type 產生的欄位名稱，不需要整個 DS_Train
-DS_TrainSeqDf = pd.read_csv(featureStatPath + 'DS_Train.csv')
-sampleSeqDict = dict(zip(DS_TrainSeqDf['name'].head(5), DS_TrainSeqDf['sequence'].head(5)))
-sampleDataDict = {0: sampleSeqDict, 1: None, -1: None}
-
-featureTypeColumnMap = discoverFeatureTypeColumnMap(usedFeatureDict, sampleDataDict)
-print(f"discover {len(featureTypeColumnMap)} feature types")
-
-# 測試用：只取 testFeatureTypeCount 個 feature type，兩個 mergedFeature 合併項目一定要包含在內
-mergedTypeNameList = [typeName for typeName in featureTypeColumnMap if typeName.startswith('mergedFeature')]
-otherTypeNameList = [typeName for typeName in featureTypeColumnMap if not typeName.startswith('mergedFeature')]
-testTypeNameList = (mergedTypeNameList + otherTypeNameList)[:testFeatureTypeCount]
-featureTypeColumnMap = {typeName: featureTypeColumnMap[typeName] for typeName in testTypeNameList}
-print(f"[test] 只使用 {len(featureTypeColumnMap)} 個 feature type 進行測試: {list(featureTypeColumnMap.keys())}")
-
-# ======================================================================================================================
-# 每一個 normalize 方式 × 每一個 feature type × 每一個 model 做一對一訓練（Optuna TPE tune，5-fold CV，用 MCC 當優化目標）
-# normalize + filter 後的資料是 Main_FeatureStk_debug.py 存好的，這裡只需要讀取
-modelNameList = ['lightgbm', 'xgboost', 'rbfsvm', 'gbc', 'ridge', 'lr', 'lda', 'ada', 'knn', 'nb', 'et', 'rf',
-                 'catboost', 'mlp', 'dt', 'svm', 'qda']
+modelNameList = ['lightgbm', 'catboost', 'rbfsvm', 'gbc', 'ridge', 'lr', 'lda', 'ada', 'knn', 'nb', 'et', 'rf',
+                 'xgboost', 'mlp', 'dt', 'svm', 'qda']
 
 # 測試用：只取 testModelCount 個 model，lightgbm 跟 xgboost 一定要包含在內
 requiredModelNameList = ['lightgbm', 'xgboost']
@@ -178,34 +63,40 @@ print(f"[test] 只使用 {len(modelNameList)} 個 model 進行測試: {modelName
 os.makedirs(mlScorePath, exist_ok=True)
 resultRows = []
 
+# ======================================================================================================================
+# 每一個 normalize 方式 × 每一個 feature type × 每一個 model 做一對一訓練（Optuna TPE tune，5-fold CV，用 MCC 當優化目標）
 for normalizeMethod in normalizeMethodList:
-    filterTrainNmlzCsvPath = featureStatPath + f'filtered_train_{dataName}_{normalizeMethod}.csv'
-    dataTrainDf = pd.read_csv(filterTrainNmlzCsvPath, index_col=[0])
-    print(f"[{normalizeMethod}] 讀取 filtered 後的資料：dataTrainDf={dataTrainDf.shape}")
+    filteredSplitDir = featureStatPath + f'featureType_csv_{dataName}_{normalizeMethod}_filtered/'
+    trainSplitDir = filteredSplitDir + 'DS_Train/'
+    valSplitDir = filteredSplitDir + 'DS_Val/'
 
-    # DS_Val：拿來給每個 tune/load 好的 model 做 predict，組成 Meta-Feature-Matrix
-    filterValNmlzCsvPath = featureStatPath + f'filtered_val_{dataName}_{normalizeMethod}.csv'
-    dataValDf = pd.read_csv(filterValNmlzCsvPath, index_col=[0])
-    print(f"[{normalizeMethod}] 讀取 DS_Val filtered 後的資料：dataValDf={dataValDf.shape}")
+    # 檔名（去掉 .csv）就是 feature type 名稱，train / val 兩邊都要有才拿來訓練
+    trainTypeFileSet = {f for f in os.listdir(trainSplitDir) if f.endswith('.csv')}
+    valTypeFileSet = {f for f in os.listdir(valSplitDir) if f.endswith('.csv')}
+    typeFileNameList = sorted(trainTypeFileSet & valTypeFileSet)
+    missingInVal = trainTypeFileSet - valTypeFileSet
+    if missingInVal:
+        print(f"[提醒] {normalizeMethod}：{len(missingInVal)} 個 feature type 只有 DS_Train 有檔案、DS_Val 沒有，已跳過: {sorted(missingInVal)}")
+    print(f"[{normalizeMethod}] 讀到 {len(typeFileNameList)} 個 feature type 的過濾後資料：{trainSplitDir}")
 
-    metaFeatureMatrix = pd.DataFrame(index=dataValDf.index)
-    metaFeatureMatrix['y'] = dataValDf['y']
+    # 測試用：只取 testFeatureTypeCount 個 feature type，兩個 mergedFeature 合併項目一定要包含在內
+    mergedTypeFileNameList = [f for f in typeFileNameList if f.startswith('mergedFeature')]
+    otherTypeFileNameList = [f for f in typeFileNameList if not f.startswith('mergedFeature')]
+    typeFileNameList = (mergedTypeFileNameList + otherTypeFileNameList)[:testFeatureTypeCount]
+    print(f"[test][{normalizeMethod}] 只使用 {len(typeFileNameList)} 個 feature type 進行測試: {typeFileNameList}")
 
-    for typeName, columnList in featureTypeColumnMap.items():  # 一次挑一種 Feature Type
-        # filtered_train 已被 FeatureStat 過濾掉部分欄位，columnList 是用原始未過濾的 featureDict 反查出來的，
-        # 兩者可能對不上，所以只取仍存在於 dataTrainDf 的欄位，避免 KeyError
-        survivedColumnList = [c for c in columnList if c in dataTrainDf.columns]
-        if not survivedColumnList:
-            print(f"[跳過] {normalizeMethod} + {typeName}：欄位全部被 FeatureStat 過濾掉，無法訓練")
-            if tune_model:
-                resultRows.append({'normalizeMethod': normalizeMethod, 'featureType': typeName,
-                                   'model': None, 'mcc': None, 'error': 'all columns filtered out'})
-            continue
-        if len(survivedColumnList) < len(columnList):
-            print(f"[提醒] {normalizeMethod} + {typeName}：{len(columnList) - len(survivedColumnList)} 欄"
-                  f"被 FeatureStat 過濾掉，剩餘 {len(survivedColumnList)} 欄")
-        subTrainDf = dataTrainDf[survivedColumnList + ['y']].copy()  # 篩選該 feature type 之 feature
-        subVal_X = dataValDf[survivedColumnList].copy()  # DS_Val 同一組欄位，只留 X 給 predict 用
+    # 用任一份 DS_Val 檔案先確定 index/y，組出 Meta-Feature-Matrix 骨架
+    firstValDf = pd.read_csv(valSplitDir + typeFileNameList[0], index_col=[0])
+    metaFeatureMatrix = pd.DataFrame(index=firstValDf.index)
+    metaFeatureMatrix['y'] = firstValDf['y']
+
+    for typeFileName in typeFileNameList:  # 一次挑一種 Feature Type
+        typeName = typeFileName[:-len('.csv')]
+
+        subTrainDf = pd.read_csv(trainSplitDir + typeFileName, index_col=[0])
+        subValDf = pd.read_csv(valSplitDir + typeFileName, index_col=[0])
+        subVal_X = subValDf.drop(columns=['y'])  # DS_Val 同一組欄位，只留 X 給 predict 用
+        print(f"[{normalizeMethod}] {typeName}: train={subTrainDf.shape}, val_X={subVal_X.shape}")
 
         # 每個 normalizeMethod + featureType 的 model 各自存在獨立資料夾，避免互相覆蓋
         comboSavePath = os.path.join(tuneModelPath, normalizeMethod, typeName.replace('.', '_'))
