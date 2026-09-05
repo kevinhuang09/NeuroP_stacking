@@ -2,7 +2,7 @@
 # 所有功能開關 (bool)，統一放在檔案最前面方便控制
 disablePlotPopup = True  # 是否禁止彈出圖表視窗
 useVscodeParentPath = True  # 使用pycharm, vscode進行編譯請開啟
-useTrainValMeta = False  # True: 讀取 Lv1 predictOnTrainToo=True 存的 DS_Train+DS_Val Meta-Feature-Matrix（檔名多 _trainval）
+useTrainValMeta = True  # True: 讀取 Lv1 predictOnTrainToo=True 存的 DS_Train+DS_Val Meta-Feature-Matrix（檔名多 _trainval）
                         # False: 沿用原本只有 DS_Val 的 Meta-Feature-Matrix 當 Lv2 訓練資料
 # ======================================================================================================================
 
@@ -69,7 +69,7 @@ for normalizeMethod in normalizeMethodList:
 
     # 每一欄都是某個 (feature type × model) 的預測機率，全部都要參與 Boruta 排序，沒有需要保護、跳過的欄位
     skipFeatureList = []
-    featRankPrefix = mlDataPath + f'Lv2_{dataName}_{normalizeMethod}_'
+    featRankPrefix = mlDataPath + f'Lv2_{dataName}_{normalizeMethod}{metaFeatureMatrixSuffix}_'
     brtObj = encodeObj.dataBoruta(borutaMethod=borutaMethod, runBoruta=True, featRankPath=featRankPrefix,
                                   trainDf=metaFeatureMatrixDf, skipFeatureList=skipFeatureList)
 
@@ -91,8 +91,8 @@ for normalizeMethod in normalizeMethodList:
     #                              trainDf=metaFeatureMatrixDf, indpDf=indpMetaFeatureMatrixDf,
     #                              brtObj=brtObj, foldNum=5, session=None)  # sessionID可修改成任意整數，ex:1,4,10,15...
 
-    # dataDecidedFeatureNum 內部是用 saveCsvPath + "/train_F{N}.csv" 存檔，等同把 featRankPrefix 當資料夾用，
-    # 所以要先把這個資料夾建出來，不然 to_csv 會因為資料夾不存在而丟 FileNotFoundError
+    # # dataDecidedFeatureNum 內部是用 saveCsvPath + "/train_F{N}.csv" 存檔，等同把 featRankPrefix 當資料夾用，
+    # # 所以要先把這個資料夾建出來，不然 to_csv 會因為資料夾不存在而丟 FileNotFoundError
     os.makedirs(featRankPrefix, exist_ok=True)
     encodeObj.dataDecidedFeatureNum(featureNum=decidedFeatureNum, saveCsvPath=featRankPrefix,
                                     trainDf=metaFeatureMatrixDf, indpDf=indpMetaFeatureMatrixDf,
@@ -114,17 +114,17 @@ for normalizeMethod in normalizeMethodList:
     lv2PycObj.doTuneModel(searchLibrary='optuna', searchAlg='tpe', includeModelList=modelNameList, foldNum=5,
                          n_iter=10, early_stopping=False, customGridDict=None)
 
-    lv2TuneSavePath = os.path.join(tuneModelPath, 'Lv2', normalizeMethod)
+    lv2TuneSavePath = os.path.join(tuneModelPath, 'Lv2', normalizeMethod + metaFeatureMatrixSuffix)
     os.makedirs(lv2TuneSavePath, exist_ok=True)
     lv2PycObj.doSaveModel(lv2TuneSavePath, b_isFinalizedModel=False)  # 儲存 tune 好的 model
 
     _, lv2CvScoreRank = lv2PycObj.doCompareModel(fold=5, includeModelList=lv2PycObj.tunedModelList)
-    lv2CvScoreCsvPath = mlScorePath + f'Lv2_cvScore_{dataName}_{normalizeMethod}.csv'
+    lv2CvScoreCsvPath = mlScorePath + f'Lv2_cvScore_{dataName}_{normalizeMethod}{metaFeatureMatrixSuffix}.csv'
     lv2CvScoreRank.to_csv(lv2CvScoreCsvPath)
     print(f"[{normalizeMethod}] Lv2 17 個 base learner 的 CV 分數已儲存到 {lv2CvScoreCsvPath}")
 
     lv2PycObj.doFinalizeModel()  # train + self test 合併重新 fit
-    lv2FinalSavePath = os.path.join(finalModelPath, 'Lv2', normalizeMethod)
+    lv2FinalSavePath = os.path.join(finalModelPath, 'Lv2', normalizeMethod + metaFeatureMatrixSuffix)
     os.makedirs(lv2FinalSavePath, exist_ok=True)
     lv2PycObj.doSaveModel(lv2FinalSavePath, b_isFinalizedModel=True)  # 儲存 finalize 好的 model
     lv2FinalModelList = lv2PycObj.finalModelList
@@ -137,7 +137,7 @@ for normalizeMethod in normalizeMethodList:
 
     lv2ScoreObjIndp = Scoring(predVectorList=lv2PredVectorListIndp, probVectorList=lv2ProbVectorListIndp,
                              answerDf=decidedIndp_y, modelNameList=modelNameList)
-    lv2IndpScoreCsvPath = mlScorePath + f'Lv2_indpScore_{dataName}_{normalizeMethod}.csv'
+    lv2IndpScoreCsvPath = mlScorePath + f'Lv2_indpScore_{dataName}_{normalizeMethod}{metaFeatureMatrixSuffix}.csv'
     lv2IndpScoreDf = lv2ScoreObjIndp.doScoring(b_optimizedMcc=False, path=lv2IndpScoreCsvPath, sortColumn='mcc')
     print(f"[{normalizeMethod}] Lv2 17 個 base learner 在 DS_Indp 上的分數已儲存到 {lv2IndpScoreCsvPath}")
     print(lv2IndpScoreDf)

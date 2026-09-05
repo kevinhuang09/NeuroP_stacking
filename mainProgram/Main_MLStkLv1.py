@@ -3,13 +3,13 @@
 disablePlotPopup = True  # 是否禁止彈出圖表視窗
 useVscodeParentPath = True  # 使用pycharm, vscode進行編譯請開啟
 tune_model = True  # True: 針對每個 normalizeMethod × feature type × model 做一對一 tune 並存檔；False: 跳過訓練，直接讀取已存的 finalized model 做 predict
-predictOnTrainToo = True  # True: 除了對 DS_Val predict 外，也對 DS_Train predict，兩者 concat 成另一份 Meta-Feature-Matrix
+predictOnTrainToo = False  # True: 除了對 DS_Val predict 外，也對 DS_Train predict，兩者 concat 成另一份 Meta-Feature-Matrix
                            # 注意：DS_Train 是 finalize 時模型看過的資料（in-sample），機率會偏樂觀，跟 DS_Val 的
                            # out-of-sample 機率意義不同，只是多存一份組法給 Lv2 比較用，不會取代原本 DS_Val-only 的檔案
 # ======================================================================================================================
 # 測試用開關：跟 Main_MLStkLv1_debug.py 功能完全相同，只差在把 feature type 與 model 數量都縮小方便快速測試
-testFeatureTypeCount = 5  # 只取 5 個 feature type（兩個 mergedFeature 合併項目一定會被包含在內）
-testModelCount = 5  # 只取 5 個 model（lightgbm、xgboost 一定會被包含在內）
+testFeatureTypeCount = 999  # 只取 5 個 feature type（兩個 mergedFeature 合併項目一定會被包含在內）
+testModelCount = 999  # 只取 5 個 model（lightgbm、xgboost 一定會被包含在內）
 # ======================================================================================================================
 
 import matplotlib
