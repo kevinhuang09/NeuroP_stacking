@@ -2,6 +2,8 @@
 # 所有功能開關 (bool)，統一放在檔案最前面方便控制
 disablePlotPopup = True  # 是否禁止彈出圖表視窗
 useVscodeParentPath = True  # 使用pycharm, vscode進行編譯請開啟
+useTrainValMeta = False  # True: 讀取 Lv1 predictOnTrainToo=True 存的 DS_Train+DS_Val Meta-Feature-Matrix（檔名多 _trainval）
+                        # False: 沿用原本只有 DS_Val 的 Meta-Feature-Matrix 當 Lv2 訓練資料
 # ======================================================================================================================
 
 import matplotlib
@@ -60,9 +62,10 @@ os.makedirs(mlDataPath, exist_ok=True)
 encodeObj = EncodeAllFeatures()
 
 for normalizeMethod in normalizeMethodList:
-    metaFeatureMatrixPath = mlScorePath + f'Meta-Feature-Matrix_{dataName}_test_{normalizeMethod}.csv'
+    metaFeatureMatrixSuffix = '_trainval' if useTrainValMeta else ''
+    metaFeatureMatrixPath = mlScorePath + f'Meta-Feature-Matrix_{dataName}_test_{normalizeMethod}{metaFeatureMatrixSuffix}.csv'
     metaFeatureMatrixDf = pd.read_csv(metaFeatureMatrixPath, index_col=[0])
-    print(f"[{normalizeMethod}] 讀取 Lv1 Meta-Feature-Matrix：{metaFeatureMatrixDf.shape}")
+    print(f"[{normalizeMethod}] 讀取 Lv1 Meta-Feature-Matrix（{metaFeatureMatrixPath}）：{metaFeatureMatrixDf.shape}")
 
     # 每一欄都是某個 (feature type × model) 的預測機率，全部都要參與 Boruta 排序，沒有需要保護、跳過的欄位
     skipFeatureList = []
