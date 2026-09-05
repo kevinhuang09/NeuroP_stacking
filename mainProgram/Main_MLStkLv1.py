@@ -198,14 +198,16 @@ for normalizeMethod in normalizeMethodList:
     indpMetaFeatureMatrix.to_csv(indpMetaFeatureMatrixPath)
     print(f"[{normalizeMethod}] DS_Indp 機率表 (Meta-Feature-Matrix) 已儲存到 {indpMetaFeatureMatrixPath}")
 
+resultValScoreSuffix = '_trainval' if predictOnTrainToo else ''
+
 if tune_model:
     resultDf = pd.DataFrame(resultRows)
-    resultCsvPath = mlScorePath + f'featureType_model_mccScore_{dataName}_test.csv'
+    resultCsvPath = mlScorePath + f'featureType_model_mccScore_{dataName}_test{resultValScoreSuffix}.csv'
     resultDf.to_csv(resultCsvPath, index=False)
     print(f"每個 normalizeMethod × feature type × model 的 MCC 分數已儲存到 {resultCsvPath}")
 
 valScoreDf = pd.DataFrame(valScoreRows)
-valScoreCsvPath = mlScorePath + f'featureType_model_valScore_{dataName}_test.csv'
+valScoreCsvPath = mlScorePath + f'featureType_model_valScore_{dataName}_test{resultValScoreSuffix}.csv'
 valScoreDf.to_csv(valScoreCsvPath, index=False)
 print(f"每個 normalizeMethod × feature type × model 在 DS_Val 上的分數（accuracy/precision/recall/f1_score/auc/specificity/mcc）"
       f"已儲存到 {valScoreCsvPath}")
