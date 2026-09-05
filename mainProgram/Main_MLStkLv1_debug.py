@@ -31,6 +31,7 @@ setupParentPath(useVscodeParentPath)
 import pandas as pd
 from MLProcess.PycaretWrapper import PycaretWrapper
 from MLProcess.Predict import Predict
+from MLProcess.Scoring import Scoring
 
 # ======================================================================================================================
 # 基本路徑：直接接 Main_FeatureStk_debug.py 產生的結果，不重新推導 feature type/欄位
@@ -53,6 +54,7 @@ print(f"use {len(modelNameList)} models")
 
 os.makedirs(mlScorePath, exist_ok=True)
 resultRows = []
+valScoreRows = []  # 每個 combo 用 finalize/load 好的 model 對 DS_Val 做 predict 後，跟真實 y 算出來的分數
 
 # ======================================================================================================================
 # 每一個 normalize 方式 × 每一個 feature type × 每一個 model 做一對一訓練（Optuna TPE tune，5-fold CV，用 MCC 當優化目標）
@@ -122,19 +124,32 @@ for normalizeMethod in normalizeMethodList:
 
                 # 用這個 model 對 DS_Val / DS_Indp 做 predict，分別寫進各自的 Meta-Feature-Matrix（機率表）
                 predObj = Predict(dataX=subVal_X, modelList=predictModelList)
-                _, probVectorList = predObj.doPredict()
+                predVectorList, probVectorList = predObj.doPredict()
                 metaFeatureMatrix[f'{typeName}.{modelName}'] = probVectorList[0]
 
                 indpPredObj = Predict(dataX=subIndp_X, modelList=predictModelList)
                 _, indpProbVectorList = indpPredObj.doPredict()
                 indpMetaFeatureMatrix[f'{typeName}.{modelName}'] = indpProbVectorList[0]
                 print(f"[predict] {normalizeMethod} + {typeName} + {modelName} 已寫入 Meta-Feature-Matrix（val + indp）")
+
+                # DS_Val 是這個 model 訓練/調參時完全沒看過的資料，拿真實 y 對 predict 結果算分，
+                # 比前面 doCompareModel 那個「DS_Train 內部 CV」的分數更能反映真正的泛化表現
+                valScoreObj = Scoring(predVectorList=predVectorList, probVectorList=probVectorList,
+                                     answerDf=subValDf[['y']], modelNameList=[modelName])
+                valScoreDf = valScoreObj.doScoring(b_optimizedMcc=False, sortColumn=None)
+                valScoreRow = {'normalizeMethod': normalizeMethod, 'featureType': typeName, 'model': modelName}
+                valScoreRow.update(valScoreDf.iloc[0].to_dict())
+                valScoreRows.append(valScoreRow)
+                print(f"[Val分數] {normalizeMethod} + {typeName} + {modelName}: "
+                      f"MCC={valScoreDf['mcc'].iloc[0]:.4f}, AUC={valScoreDf['auc'].iloc[0]:.4f}")
             except Exception as e:
                 actionName = '訓練' if tune_model else '讀取/predict'
                 print(f"[跳過] {normalizeMethod} + {typeName} + {modelName} {actionName}失敗: {e}")
                 if tune_model:
                     resultRows.append({'normalizeMethod': normalizeMethod, 'featureType': typeName,
                                        'model': modelName, 'mcc': None, 'error': str(e)})
+                valScoreRows.append({'normalizeMethod': normalizeMethod, 'featureType': typeName,
+                                     'model': modelName, 'mcc': None, 'error': str(e)})
 
     metaFeatureMatrixPath = mlScorePath + f'Meta-Feature-Matrix_{dataName}_{normalizeMethod}.csv'
     metaFeatureMatrix.to_csv(metaFeatureMatrixPath)
@@ -149,3 +164,9 @@ if tune_model:
     resultCsvPath = mlScorePath + f'featureType_model_mccScore_{dataName}.csv'
     resultDf.to_csv(resultCsvPath, index=False)
     print(f"每個 normalizeMethod × feature type × model 的 MCC 分數已儲存到 {resultCsvPath}")
+
+valScoreDf = pd.DataFrame(valScoreRows)
+valScoreCsvPath = mlScorePath + f'featureType_model_valScore_{dataName}.csv'
+valScoreDf.to_csv(valScoreCsvPath, index=False)
+print(f"每個 normalizeMethod × feature type × model 在 DS_Val 上的分數（accuracy/precision/recall/f1_score/auc/specificity/mcc）"
+      f"已儲存到 {valScoreCsvPath}")
