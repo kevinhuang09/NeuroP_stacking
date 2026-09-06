@@ -254,7 +254,7 @@ paramPath = "../data/param/"  # 內含檔案: featureTypeDict.pkl, normalize.pkl
 featureStatPath = '../data/featureStat/'
 dataName = 'NeuroP_1'
 
-normalizeMethodList = ['standard']  # normalization 目前先用standard 可自行改list
+normalizeMethodList = ['robust']  # normalization 目前先用standard 可自行改list
 
 def saveFastaSeqCountStat(enable, fastaStatPath, statItems, statLabel='Fasta', fileMode='w', writeHeader=True):
     """

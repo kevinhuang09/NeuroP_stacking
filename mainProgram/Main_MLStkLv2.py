@@ -48,10 +48,10 @@ dataName = 'NeuroP_1'
 
 # 要跟 Main_FeatureStk_debug.py / Main_MLStkLv1_debug_test.py 的 normalizeMethodList 保持一致，
 # 否則會去讀一份不存在的 Meta-Feature-Matrix_{dataName}_test_{normalizeMethod}.csv
-normalizeMethodList = ['standard']
+normalizeMethodList = ['robust']
 
 borutaMethod = 'XGB'  # Boruta 底層估計器：'XGB' / 'RF' / 'LGB'，跟 main_Feature_v2.py 一致用 XGB
-decidedFeatureNum = 10  # Boruta 排序後，決定拿前幾個 meta-feature 來訓練 Lv2 model
+decidedFeatureNum = 20  # Boruta 排序後，決定拿前幾個 meta-feature 來訓練 Lv2 model
 
 # Lv2 的 base learner 沿用 Lv1 debug 用過的 17 個 model
 modelNameList = ['lightgbm', 'catboost', 'rbfsvm', 'gbc', 'ridge', 'lr', 'lda', 'ada', 'knn', 'nb', 'et', 'rf',
@@ -91,8 +91,8 @@ for normalizeMethod in normalizeMethodList:
     #                              trainDf=metaFeatureMatrixDf, indpDf=indpMetaFeatureMatrixDf,
     #                              brtObj=brtObj, foldNum=5, session=None)  # sessionID可修改成任意整數，ex:1,4,10,15...
 
-    # # dataDecidedFeatureNum 內部是用 saveCsvPath + "/train_F{N}.csv" 存檔，等同把 featRankPrefix 當資料夾用，
-    # # 所以要先把這個資料夾建出來，不然 to_csv 會因為資料夾不存在而丟 FileNotFoundError
+    # dataDecidedFeatureNum 內部是用 saveCsvPath + "/train_F{N}.csv" 存檔，等同把 featRankPrefix 當資料夾用，
+    # 所以要先把這個資料夾建出來，不然 to_csv 會因為資料夾不存在而丟 FileNotFoundError
     os.makedirs(featRankPrefix, exist_ok=True)
     encodeObj.dataDecidedFeatureNum(featureNum=decidedFeatureNum, saveCsvPath=featRankPrefix,
                                     trainDf=metaFeatureMatrixDf, indpDf=indpMetaFeatureMatrixDf,
